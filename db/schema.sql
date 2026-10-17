@@ -1,7 +1,7 @@
 -- =====================================================================
 -- M9 Reservas de Viajes - Esquema de base de datos (PostgreSQL)
--- Copia del esquema real de Supabase. Orden: extension, funciones,
--- tablas, indices, triggers.
+-- Esquema para bases nuevas. El historial se registra desde los servicios.
+-- Para bases existentes: migrations/001_historial_desde_backend.sql.
 -- =====================================================================
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
@@ -48,69 +48,6 @@ AS $function$
 BEGIN
     NEW.modificada_en = NOW();
     RETURN NEW;
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.fn_registrar_historial_reserva()
- RETURNS trigger
- LANGUAGE plpgsql
-AS $function$
-DECLARE
-    v_actor_id VARCHAR(64);
-    v_rol_actor CHAR(1);
-    v_key TEXT;
-    v_val_old TEXT;
-    v_val_new TEXT;
-    v_json_old JSONB;
-    v_json_new JSONB;
-BEGIN
-    v_actor_id := NULLIF(current_setting('app.actor_id', true), '');
-    v_rol_actor := COALESCE(NULLIF(current_setting('app.actor_role', true), ''), 'S');
-    IF v_rol_actor NOT IN ('C', 'O', 'S') THEN
-        v_rol_actor := 'S';
-    END IF;
-
-    IF (TG_OP = 'INSERT') THEN
-        INSERT INTO historial_reserva (
-            reserva_id, tipo_cambio, campo_modificado, valor_anterior, valor_nuevo, actor_id, rol_actor, motivo
-        ) VALUES (
-            NEW.id, 'C', NULL, NULL, to_jsonb(NEW)::text, v_actor_id, v_rol_actor, 'Creacion inicial de la reserva'
-        );
-        RETURN NEW;
-
-    ELSIF (TG_OP = 'UPDATE') THEN
-        v_json_old := to_jsonb(OLD);
-        v_json_new := to_jsonb(NEW);
-
-        FOR v_key IN SELECT jsonb_object_keys(v_json_new) LOOP
-            IF v_key IN ('modificada_en', 'creada_en', 'clave_idempotencia') THEN
-                CONTINUE;
-            END IF;
-
-            v_val_old := v_json_old ->> v_key;
-            v_val_new := v_json_new ->> v_key;
-
-            IF (v_val_old IS DISTINCT FROM v_val_new) THEN
-                INSERT INTO historial_reserva (
-                    reserva_id, tipo_cambio, campo_modificado, valor_anterior, valor_nuevo, actor_id, rol_actor, motivo
-                ) VALUES (
-                    NEW.id,
-                    CASE
-                        WHEN v_key = 'estado' AND v_val_new = 'C' THEN 'Y'
-                        WHEN v_key = 'estado' AND v_val_new = 'A' THEN 'A'
-                        WHEN v_key = 'estado' AND v_val_new = 'X' THEN 'X'
-                        WHEN v_key = 'estado' AND v_val_new = 'V' THEN 'V'
-                        ELSE 'M'
-                    END,
-                    v_key, v_val_old, v_val_new, v_actor_id, v_rol_actor,
-                    CASE WHEN v_key = 'motivo_cancelacion' THEN v_val_new ELSE NULL END
-                );
-            END IF;
-        END LOOP;
-        RETURN NEW;
-    END IF;
-
-    RETURN NULL;
 END;
 $function$;
 
@@ -398,15 +335,8 @@ create table public.historial_reserva (
 create index if not exists idx_historial_reserva_id on public.historial_reserva using btree (reserva_id);
 
 -- ---------------------------------------------------------------------
--- Triggers de reserva (se crean al final porque usan las funciones y
--- escriben en historial_reserva)
+-- Triggers de integridad y fecha. La auditoría pertenece al backend.
 -- ---------------------------------------------------------------------
-
-create trigger trg_reserva_historial_aut
-after INSERT
-or
-update on reserva for EACH row
-execute FUNCTION fn_registrar_historial_reserva ();
 
 create trigger trg_reserva_modificada_en BEFORE
 update on reserva for EACH row

@@ -16,7 +16,7 @@ export const reservasRouter = Router();
 reservasRouter.post('/', crearReservaCtrl); // Oriana
 reservasRouter.get('/', listarReservasCtrl); // Oriana (?clienteId=...)
 reservasRouter.get('/:id', consultarReservaCtrl); // Oriana
-reservasRouter.patch('/:id', modificarReservaCtrl); // Valentino
-reservasRouter.post('/:id/cancelar', cancelarReservaCtrl); // Valentino
-reservasRouter.get('/:id/historial', historialReservaCtrl); // Valentino
+reservasRouter.patch('/:id', modificarReservaCtrl);
+reservasRouter.post('/:id/cancelar', cancelarReservaCtrl);
+reservasRouter.get('/:id/historial', historialReservaCtrl);
 reservasRouter.post('/:id/activar', activarReservaCtrl); // Bianca
