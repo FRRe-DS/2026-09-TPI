@@ -44,9 +44,9 @@ export async function insertarReserva(
 ): Promise<Reserva> {
   const { rows } = await db.query(
     `INSERT INTO reserva
-       (cliente_id, origen, destino, tipo_vehiculo, fecha_hora, zona_horaria,
+      (cliente_id, origen, destino, tipo_vehiculo, fecha_hora, zona_horaria,
         estado, tarifa_estimada, clave_idempotencia)
-     VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9)
+    VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       datos.clienteId,
@@ -123,7 +123,7 @@ export async function actualizarDatosReserva(
   }
   const { rows } = await db.query(
     `UPDATE reserva SET ${[...sets, 'modificada_en = now()'].join(', ')}
-     WHERE id = $1 AND estado IN ($2, $3)
+    WHERE id = $1 AND estado IN ($2, $3)
      RETURNING *`,
     valores,
   );
@@ -139,9 +139,30 @@ export async function cancelarReservaEnBase(
 ): Promise<Reserva | null> {
   const { rows } = await db.query(
     `UPDATE reserva SET estado = $2, motivo_cancelacion = $3, modificada_en = now()
-     WHERE id = $1 AND estado IN ($4, $5)
+    WHERE id = $1 AND estado IN ($4, $5)
      RETURNING *`,
     [id, CODIGO_ESTADO.CANCELADA, motivo, CODIGO_ESTADO.PENDIENTE, CODIGO_ESTADO.CONFIRMADA],
   );
   return rows[0] ? filaAReserva(rows[0]) : null;
+}
+
+export async function actualizarEstadoReserva(
+    db: Ejecutor,
+    reservaId: string,
+    nuevoEstado: 'PENDIENTE' | 'CONFIRMADA'
+): Promise<Reserva | null> {
+
+    const codigoEstado = nuevoEstado === 'CONFIRMADA' ? 'C' : 'P';
+
+    const resultado = await db.query(
+        `UPDATE reserva
+        SET estado = $1, modificada_en = NOW()
+        WHERE id = $2 AND estado = 'P'
+         RETURNING *`,
+        [codigoEstado, reservaId]
+    );
+
+    if (resultado.rows.length === 0) return null;
+
+    return filaAReserva(resultado.rows[0]);
 }
