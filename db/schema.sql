@@ -137,8 +137,10 @@ BEGIN
             RAISE EXCEPTION 'Transicion de estado invalida: Desde P (Pendiente) solo se puede pasar a C, X o V.';
         ELSIF OLD.estado = 'C' AND NEW.estado NOT IN ('A', 'X', 'V') THEN
             RAISE EXCEPTION 'Transicion de estado invalida: Desde C (Confirmada) solo se puede pasar a A, X o V.';
-        ELSIF OLD.estado IN ('A', 'X', 'V') THEN
-            RAISE EXCEPTION 'Transicion de estado invalida: Una reserva en estado final o activada no puede cambiar de estado.';
+        ELSIF OLD.estado = 'A' AND NEW.estado <> 'V' THEN
+            RAISE EXCEPTION 'Transicion de estado invalida: Desde A (Activada) solo se puede pasar a V (sin conductor).';
+        ELSIF OLD.estado IN ('X', 'V') THEN
+            RAISE EXCEPTION 'Transicion de estado invalida: Una reserva cancelada o vencida no puede cambiar de estado.';
         END IF;
     END IF;
 
