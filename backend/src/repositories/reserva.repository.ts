@@ -33,7 +33,7 @@ export function filaAReserva(fila: any): Reserva {
   };
 }
 
-// OJO: la base tiene un trigger que registra solo el historial de creación.
+// El servicio que crea la reserva debe registrar CREACION en la misma transacción.
 export async function insertarReserva(
   db: Ejecutor,
   datos: DatosNuevaReserva & {
@@ -63,8 +63,31 @@ export async function insertarReserva(
   return filaAReserva(rows[0]);
 }
 
-export async function buscarReservaPorId(db: Ejecutor, id: string): Promise<Reserva | null> {
-  const { rows } = await db.query('SELECT * FROM reserva WHERE id = $1', [id]);
+// bloquear=true se usa dentro de transaccion para validar y escribir sobre la misma versión.
+export async function buscarReservaPorId(
+  db: Ejecutor,
+  id: string,
+  bloquear = false,
+): Promise<Reserva | null> {
+  const { rows } = await db.query(
+    `SELECT * FROM reserva WHERE id = $1${bloquear ? ' FOR UPDATE' : ''}`,
+    [id],
+  );
+  return rows[0] ? filaAReserva(rows[0]) : null;
+}
+
+// Confirmación condicional: nunca vuelve a confirmar una reserva que dejó de estar PENDIENTE.
+export async function confirmarReservaEnBase(
+  db: Ejecutor,
+  id: string,
+  tarifaEstimada: number,
+): Promise<Reserva | null> {
+  const { rows } = await db.query(
+    `UPDATE reserva SET estado = $2, tarifa_estimada = $3, modificada_en = now()
+     WHERE id = $1 AND estado = $4
+     RETURNING *`,
+    [id, CODIGO_ESTADO.CONFIRMADA, tarifaEstimada, CODIGO_ESTADO.PENDIENTE],
+  );
   return rows[0] ? filaAReserva(rows[0]) : null;
 }
 
