@@ -1,10 +1,15 @@
-// PROVISORIO. Valentino reemplaza este archivo completo con su versión.
 import { Request, Response } from 'express';
+import { cancelarReserva, modificarReserva, obtenerHistorial } from '../services/modificarCancelar.service';
+import { actorDe, rolDe } from '../utils/actor';
 
-const pendiente = (_req: Request, res: Response) => {
-  res.status(501).json({ codigo: 'NO_IMPLEMENTADO', mensaje: 'Lo está programando NOMBRE' });
-};
+export async function modificarReservaCtrl(req: Request<{ id: string }>, res: Response) {
+  res.json(await modificarReserva(req.params.id, req.body, actorDe(req), rolDe(req)));
+}
 
-export const modificarReservaCtrl = pendiente;
-export const cancelarReservaCtrl = pendiente;
-export const historialReservaCtrl = pendiente;
+export async function cancelarReservaCtrl(req: Request<{ id: string }>, res: Response) {
+  res.json(await cancelarReserva(req.params.id, req.body, actorDe(req), rolDe(req)));
+}
+
+export async function historialReservaCtrl(req: Request<{ id: string }>, res: Response) {
+  res.json(await obtenerHistorial(req.params.id));
+}

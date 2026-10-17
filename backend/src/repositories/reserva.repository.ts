@@ -33,7 +33,7 @@ export function filaAReserva(fila: any): Reserva {
   };
 }
 
-// OJO: la base tiene un trigger que registra solo el historial de creación.
+// El servicio que crea la reserva debe registrar CREACION en la misma transacción.
 export async function insertarReserva(
   db: Ejecutor,
   datos: DatosNuevaReserva & {
@@ -44,9 +44,9 @@ export async function insertarReserva(
 ): Promise<Reserva> {
   const { rows } = await db.query(
     `INSERT INTO reserva
-       (cliente_id, origen, destino, tipo_vehiculo, fecha_hora, zona_horaria,
+      (cliente_id, origen, destino, tipo_vehiculo, fecha_hora, zona_horaria,
         estado, tarifa_estimada, clave_idempotencia)
-     VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9)
+    VALUES ($1, $2::jsonb, $3::jsonb, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
     [
       datos.clienteId,
@@ -63,8 +63,31 @@ export async function insertarReserva(
   return filaAReserva(rows[0]);
 }
 
-export async function buscarReservaPorId(db: Ejecutor, id: string): Promise<Reserva | null> {
-  const { rows } = await db.query('SELECT * FROM reserva WHERE id = $1', [id]);
+// bloquear=true se usa dentro de transaccion para validar y escribir sobre la misma versión.
+export async function buscarReservaPorId(
+  db: Ejecutor,
+  id: string,
+  bloquear = false,
+): Promise<Reserva | null> {
+  const { rows } = await db.query(
+    `SELECT * FROM reserva WHERE id = $1${bloquear ? ' FOR UPDATE' : ''}`,
+    [id],
+  );
+  return rows[0] ? filaAReserva(rows[0]) : null;
+}
+
+// Confirmación condicional: nunca vuelve a confirmar una reserva que dejó de estar PENDIENTE.
+export async function confirmarReservaEnBase(
+  db: Ejecutor,
+  id: string,
+  tarifaEstimada: number,
+): Promise<Reserva | null> {
+  const { rows } = await db.query(
+    `UPDATE reserva SET estado = $2, tarifa_estimada = $3, modificada_en = now()
+     WHERE id = $1 AND estado = $4
+     RETURNING *`,
+    [id, CODIGO_ESTADO.CONFIRMADA, tarifaEstimada, CODIGO_ESTADO.PENDIENTE],
+  );
   return rows[0] ? filaAReserva(rows[0]) : null;
 }
 
@@ -123,7 +146,7 @@ export async function actualizarDatosReserva(
   }
   const { rows } = await db.query(
     `UPDATE reserva SET ${[...sets, 'modificada_en = now()'].join(', ')}
-     WHERE id = $1 AND estado IN ($2, $3)
+    WHERE id = $1 AND estado IN ($2, $3)
      RETURNING *`,
     valores,
   );
@@ -139,9 +162,30 @@ export async function cancelarReservaEnBase(
 ): Promise<Reserva | null> {
   const { rows } = await db.query(
     `UPDATE reserva SET estado = $2, motivo_cancelacion = $3, modificada_en = now()
-     WHERE id = $1 AND estado IN ($4, $5)
+    WHERE id = $1 AND estado IN ($4, $5)
      RETURNING *`,
     [id, CODIGO_ESTADO.CANCELADA, motivo, CODIGO_ESTADO.PENDIENTE, CODIGO_ESTADO.CONFIRMADA],
   );
   return rows[0] ? filaAReserva(rows[0]) : null;
+}
+
+export async function actualizarEstadoReserva(
+    db: Ejecutor,
+    reservaId: string,
+    nuevoEstado: 'PENDIENTE' | 'CONFIRMADA'
+): Promise<Reserva | null> {
+
+    const codigoEstado = nuevoEstado === 'CONFIRMADA' ? 'C' : 'P';
+
+    const resultado = await db.query(
+        `UPDATE reserva
+        SET estado = $1, modificada_en = NOW()
+        WHERE id = $2 AND estado = 'P'
+         RETURNING *`,
+        [codigoEstado, reservaId]
+    );
+
+    if (resultado.rows.length === 0) return null;
+
+    return filaAReserva(resultado.rows[0]);
 }
