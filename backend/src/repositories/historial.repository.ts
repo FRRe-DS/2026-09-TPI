@@ -1,7 +1,7 @@
 // Repositorio del historial: solo INSERT y SELECT. Nunca se borra ni se modifica (RF-9.12).
 // En la base tipo_cambio y rol_actor son UNA letra: acá se traducen.
-// OJO: la base ya registra sola el historial de crear y de cambiar una reserva (trigger).
-// Usar registrarHistorial para esos mismos eventos duplicaría las filas.
+// Cada servicio registra sus eventos junto al cambio, dentro de la misma transacción.
+// En bases anteriores debe aplicarse db/migrations/001_historial_desde_backend.sql.
 import { Ejecutor } from '../db/pool';
 import {
   CODIGO_ROL_ACTOR,
@@ -32,8 +32,8 @@ export async function registrarHistorial(db: Ejecutor, e: NuevaEntradaHistorial)
   await db.query(
     `INSERT INTO historial_reserva
        (reserva_id, tipo_cambio, campo_modificado, valor_anterior, valor_nuevo,
-        actor_id, rol_actor, motivo)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        actor_id, rol_actor, motivo, fecha_cambio)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp())`,
     [
       e.reservaId,
       aCodigo(CODIGO_TIPO_CAMBIO, e.tipoCambio, 'tipo de cambio'),
