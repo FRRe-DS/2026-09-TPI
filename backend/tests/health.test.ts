@@ -21,3 +21,14 @@ describe('GET /health', () => {
     expect(res.body).toHaveProperty('mensaje');
   });
 });
+describe('X-Request-Id', () => {
+  it('genera uno si el pedido no lo trae', async () => {
+    const res = await request(app).get('/health');
+    expect(res.headers['x-request-id']).toBeTruthy();
+  });
+
+  it('devuelve el mismo que recibió', async () => {
+    const res = await request(app).get('/health').set('X-Request-Id', 'prueba-123');
+    expect(res.headers['x-request-id']).toBe('prueba-123');
+  });
+});
