@@ -1,6 +1,11 @@
-// PROVISORIO. BIANCA reemplaza este archivo completo con su versión.
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
+import { activarReserva } from '../services/activarReserva.service';
 
-export const activarReservaCtrl = (_req: Request, res: Response) => {
-  res.status(501).json({ codigo: 'NO_IMPLEMENTADO', mensaje: 'Lo está programando Persona 4' });
-};
+export async function activarReservaCtrl(req: Request, res: Response, next: NextFunction) {
+  try {
+    const reserva = await activarReserva(req.params.id);
+    res.status(200).json(reserva);
+  } catch (error) {
+    next(error); // el manejador de errores del proyecto arma la respuesta {codigo, mensaje, detalle}
+  }
+}

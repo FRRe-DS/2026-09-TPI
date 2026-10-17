@@ -154,7 +154,7 @@ export async function actualizarDatosReserva(
 }
 
 // Cancela SOLO si la reserva sigue en un estado editable (si no, devuelve null).
-// El motivo se guarda en reserva.motivo_cancelacion (es opcional para no romper llamadas viejas).
+// El motivo se guarda en reserva.motivo_cancelacion .
 export async function cancelarReservaEnBase(
   db: Ejecutor,
   id: string,
@@ -188,4 +188,30 @@ export async function actualizarEstadoReserva(
     if (resultado.rows.length === 0) return null;
 
     return filaAReserva(resultado.rows[0]);
+}
+// ACTIVACIÓN: pasa de CONFIRMADA a ACTIVADA en UNA sola instrucción (el "cartel").
+// Si dos pedidos llegan a la vez, la base deja pasar a uno solo; el otro recibe null.
+export async function tomarReservaParaActivar(db: Ejecutor, id: string): Promise<Reserva | null> {
+  const { rows } = await db.query(
+    `UPDATE reserva SET estado = $2, modificada_en = now()
+     WHERE id = $1 AND estado = $3
+     RETURNING *`,
+    [id, CODIGO_ESTADO.ACTIVADA, CODIGO_ESTADO.CONFIRMADA],
+  );
+  return rows[0] ? filaAReserva(rows[0]) : null;
+}
+
+// Guarda el id que devolvió M5, solo si la reserva está ACTIVADA y todavía no tiene uno.
+export async function guardarSolicitudDespacho(
+  db: Ejecutor,
+  id: string,
+  solicitudDespachoId: string,
+): Promise<Reserva | null> {
+  const { rows } = await db.query(
+    `UPDATE reserva SET solicitud_despacho_id = $2, modificada_en = now()
+     WHERE id = $1 AND estado = $3 AND solicitud_despacho_id IS NULL
+     RETURNING *`,
+    [id, solicitudDespachoId, CODIGO_ESTADO.ACTIVADA],
+  );
+  return rows[0] ? filaAReserva(rows[0]) : null;
 }
