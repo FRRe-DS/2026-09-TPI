@@ -80,8 +80,8 @@ const mock: ReservasApi = {
     const nueva: Reserva = {
       ...datos,
       id: crypto.randomUUID(),
-      origen: { direccion: datos.origen, latitud: 0, longitud: 0 },
-      destino: { direccion: datos.destino, latitud: 0, longitud: 0 },
+      origen: datos.origen,
+      destino: datos.destino,
       estado: 'CONFIRMADA',
       tarifaEstimada: 4500,
       motivoCancelacion: null,

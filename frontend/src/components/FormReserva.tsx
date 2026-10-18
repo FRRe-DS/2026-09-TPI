@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { reservasApi, ApiError } from '../api/reservas';
-import type { TipoVehiculo } from '../types';
+import type { TipoVehiculo, Ubicacion } from '../types';
+import { MapaSelector } from './MapaSelector';
 
 interface Props {
     clienteId: string;
@@ -10,12 +11,9 @@ interface Props {
 
 type Estado = 'idle' | 'guardando' | 'ok' | 'error';
 
-// Por ahora el backend solo reconoce estas direcciones (geocodificación simulada de M4)
-const DIRECCIONES_CONOCIDAS = ['UTN', 'Aeropuerto', 'Terminal de Ómnibus'];
-
 export function FormReserva({ clienteId, onCreada }: Props) {
-    const [origen, setOrigen] = useState('');
-    const [destino, setDestino] = useState('');
+    const [origen, setOrigen] = useState<Ubicacion | null>(null);
+    const [destino, setDestino] = useState<Ubicacion | null>(null);
     const [tipoVehiculo, setTipoVehiculo] = useState<TipoVehiculo>('AUTO');
     const [fechaHora, setFechaHora] = useState('');
     const [estado, setEstado] = useState<Estado>('idle');
@@ -23,6 +21,11 @@ export function FormReserva({ clienteId, onCreada }: Props) {
 
     async function enviar(e: FormEvent) {
         e.preventDefault();
+        if (!origen || !destino) {
+            setEstado('error');
+            setMensaje('Marcá el origen y el destino en el mapa');
+            return;
+        }
         setEstado('guardando');
         setMensaje('Guardando…');
         try {
@@ -36,8 +39,8 @@ export function FormReserva({ clienteId, onCreada }: Props) {
             });
             setEstado('ok');
             setMensaje('Reserva creada');
-            setOrigen('');
-            setDestino('');
+            setOrigen(null);
+            setDestino(null);
             setFechaHora('');
             onCreada();
         } catch (err) {
@@ -51,21 +54,14 @@ export function FormReserva({ clienteId, onCreada }: Props) {
         <form onSubmit={enviar} className="card">
             <h2>Nueva reserva</h2>
 
-            <label>
-                Origen
-                <input list="direcciones" value={origen} onChange={(e) => setOrigen(e.target.value)} required />
-            </label>
-
-            <label>
-                Destino
-                <input list="direcciones" value={destino} onChange={(e) => setDestino(e.target.value)} required />
-            </label>
-
-            <datalist id="direcciones">
-                {DIRECCIONES_CONOCIDAS.map((d) => (
-                    <option key={d} value={d} />
-                ))}
-            </datalist>
+            <MapaSelector
+                origen={origen}
+                destino={destino}
+                onCambio={(o, d) => {
+                    setOrigen(o);
+                    setDestino(d);
+                }}
+            />
 
             <label>
                 Tipo de vehículo
