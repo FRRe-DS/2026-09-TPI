@@ -62,7 +62,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                     {r.origen.direccion} → {r.destino.direccion}
                   </strong>
                   <span>
-                    {r.tipoVehiculo} · {new Date(r.fechaHora).toLocaleString('es-AR')}
+                    {r.tipoVehiculo} · {new Date(r.fechaHora).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short', hour12: false })}
                   </span>
                   {r.tarifaEstimada != null && (
                     <span>Tarifa estimada: ${r.tarifaEstimada}</span>
