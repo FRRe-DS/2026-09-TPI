@@ -33,7 +33,6 @@ export interface Reserva {
   modificadaEn?: string;
 }
 
-// Al crear, origen y destino se mandan como texto; el backend busca las coordenadas
 // Un punto elegido en el mapa
 export interface Ubicacion {
   direccion: string;
@@ -46,6 +45,11 @@ export interface NuevaReserva {
   clienteId: string;
   origen: Ubicacion;
   destino: Ubicacion;
+  tipoVehiculo: TipoVehiculo;
+  fechaHora: string;
+  zonaHoraria: string;
+}
+
 // Formato de error acordado: código, mensaje y detalle
 export interface ErrorApi {
   codigo: string;
