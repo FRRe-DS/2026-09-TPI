@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from 'express';
 import { activarReserva } from '../services/activarReserva.service';
 
-export async function activarReservaCtrl(req: Request, res: Response, next: NextFunction) {
+export async function activarReservaCtrl(req: Request<{ id: string }>, res: Response, next: NextFunction) {
   try {
     const reserva = await activarReserva(req.params.id);
     res.status(200).json(reserva);
