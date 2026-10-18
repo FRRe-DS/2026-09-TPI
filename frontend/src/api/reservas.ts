@@ -14,7 +14,7 @@ export class ApiError extends Error {
 interface ReservasApi {
     listar(clienteId: string): Promise<Reserva[]>;
     crear(datos: NuevaReserva): Promise<Reserva>;
-    cancelar(id: number, motivo: string): Promise<Reserva>;
+    cancelar(id: string, motivo: string): Promise<Reserva>;
 }
 
 // ---------- Backend real ----------
@@ -45,8 +45,15 @@ async function pedir<T>(ruta: string, opciones?: RequestInit): Promise<T> {
 const real: ReservasApi = {
     listar: (clienteId) =>
         pedir<Reserva[]>(`/reservas?clienteId=${encodeURIComponent(clienteId)}`),
-    crear: (datos) =>
-        pedir<Reserva>('/reservas', { method: 'POST', body: JSON.stringify(datos) }),
+    // El backend pide una claveIdempotencia (UUID) para no crear dos veces la misma reserva,
+    // y responde { mensaje, reserva, condiciones }: nos quedamos con la reserva.
+    crear: async (datos) => {
+        const respuesta = await pedir<{ reserva: Reserva }>('/reservas', {
+            method: 'POST',
+            body: JSON.stringify({ ...datos, claveIdempotencia: crypto.randomUUID() }),
+        });
+        return respuesta.reserva;
+    },
     cancelar: (id, motivo) =>
         pedir<Reserva>(`/reservas/${id}/cancelar`, {
             method: 'POST',
@@ -56,7 +63,6 @@ const real: ReservasApi = {
 
 // ---------- Simulación (mientras no hay backend) ----------
 let reservasMock: Reserva[] = [];
-let siguienteId = 1;
 const esperar = () => new Promise((r) => setTimeout(r, 500));
 
 const mock: ReservasApi = {
@@ -73,7 +79,9 @@ const mock: ReservasApi = {
     const ahora = new Date().toISOString();
     const nueva: Reserva = {
       ...datos,
-      id: siguienteId++,
+      id: crypto.randomUUID(),
+      origen: { direccion: datos.origen, latitud: 0, longitud: 0 },
+      destino: { direccion: datos.destino, latitud: 0, longitud: 0 },
       estado: 'CONFIRMADA',
       tarifaEstimada: 4500,
       motivoCancelacion: null,

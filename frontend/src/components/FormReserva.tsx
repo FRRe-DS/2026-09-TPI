@@ -10,6 +10,9 @@ interface Props {
 
 type Estado = 'idle' | 'guardando' | 'ok' | 'error';
 
+// Por ahora el backend solo reconoce estas direcciones (geocodificación simulada de M4)
+const DIRECCIONES_CONOCIDAS = ['UTN', 'Aeropuerto', 'Terminal de Ómnibus'];
+
 export function FormReserva({ clienteId, onCreada }: Props) {
     const [origen, setOrigen] = useState('');
     const [destino, setDestino] = useState('');
@@ -50,13 +53,19 @@ export function FormReserva({ clienteId, onCreada }: Props) {
 
             <label>
                 Origen
-                <input value={origen} onChange={(e) => setOrigen(e.target.value)} required />
+                <input list="direcciones" value={origen} onChange={(e) => setOrigen(e.target.value)} required />
             </label>
 
             <label>
                 Destino
-                <input value={destino} onChange={(e) => setDestino(e.target.value)} required />
+                <input list="direcciones" value={destino} onChange={(e) => setDestino(e.target.value)} required />
             </label>
+
+            <datalist id="direcciones">
+                {DIRECCIONES_CONOCIDAS.map((d) => (
+                    <option key={d} value={d} />
+                ))}
+            </datalist>
 
             <label>
                 Tipo de vehículo

@@ -4,9 +4,8 @@ import { ListaReservas } from './components/ListaReservas';
 import { reservasApi, USE_MOCK } from './api/reservas';
 import type { Reserva } from './types';
 
-// Provisorio hasta que exista el login (M1).
-// Cuando el Bloque 2 suba db/seed.sql, poné acá un clienteId que exista ahí.
-const CLIENTE_ID = 'c-1';
+// Provisorio hasta que exista el login (M1). Es un cliente del db/seed.sql.
+const CLIENTE_ID = 'cliente_001';
 
 export default function App() {
   const [reservas, setReservas] = useState<Reserva[]>([]);

@@ -7,11 +7,21 @@ export type EstadoReserva =
   | 'ACTIVADA'
   | 'VENCIDA';
 
+// Así devuelve el backend el origen y el destino
+export interface Direccion {
+  direccion: string;
+  latitud: number;
+  longitud: number;
+  alias?: string | null;
+  piso?: string | null;
+  indicaciones?: string | null;
+}
+
 export interface Reserva {
-  id: number;
+  id: string; // UUID
   clienteId: string;
-  origen: string;
-  destino: string;
+  origen: Direccion;
+  destino: Direccion;
   tipoVehiculo: TipoVehiculo;
   fechaHora: string;   // en UTC, ej: "2026-10-23T09:00:00.000Z"
   zonaHoraria: string; // ej: "America/Argentina/Buenos_Aires"
@@ -20,8 +30,10 @@ export interface Reserva {
   motivoCancelacion: string | null;
   solicitudDespachoId: string | null; // vacío hasta que M5 crea la solicitud
   creadaEn: string;
+  modificadaEn?: string;
 }
 
+// Al crear, origen y destino se mandan como texto; el backend busca las coordenadas
 export interface NuevaReserva {
   clienteId: string;
   origen: string;
@@ -35,5 +47,5 @@ export interface NuevaReserva {
 export interface ErrorApi {
   codigo: string;
   mensaje: string;
-  detalle?: string;
+  detalle?: unknown;
 }
