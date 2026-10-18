@@ -216,4 +216,109 @@ it('crea una reserva MOTO con tarifa estimada de 3000', async () => {
     expect(respuesta.body.reserva.estado).toBe('CONFIRMADA');
 
 });
+
+it('crea una reserva con coordenadas enviadas desde el mapa', async () => {
+
+    const fechaReserva = new Date(
+        Date.now() + 2 * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const respuesta = await request(app)
+        .post('/reservas')
+        .send({
+            clienteId: '25',
+            origen: {
+                direccion: 'French 414, Resistencia',
+                latitud: -27.4606,
+                longitud: -58.9839
+            },
+            destino: {
+                direccion: 'Aeropuerto Resistencia',
+                latitud: -27.4497,
+                longitud: -59.0561
+            },
+            tipoVehiculo: 'AUTO',
+            fechaHora: fechaReserva,
+            zonaHoraria: 'America/Argentina/Cordoba',
+            claveIdempotencia: randomUUID()
+        });
+
+    expect(respuesta.status).toBe(201);
+
+    expect(respuesta.body.reserva.origen).toEqual({
+        direccion: 'French 414, Resistencia',
+        latitud: -27.4606,
+        longitud: -58.9839
+    });
+
+    expect(respuesta.body.reserva.destino).toEqual({
+        direccion: 'Aeropuerto Resistencia',
+        latitud: -27.4497,
+        longitud: -59.0561
+    });
+
+});
+
+it('devuelve 400 cuando las coordenadas son inválidas', async () => {
+
+    const fechaReserva = new Date(
+        Date.now() + 2 * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const respuesta = await request(app)
+        .post('/reservas')
+        .send({
+            clienteId: '25',
+            origen: {
+                direccion: 'French 414, Resistencia',
+                latitud: -100,
+                longitud: -58.9839
+            },
+            destino: {
+                direccion: 'Aeropuerto Resistencia',
+                latitud: -27.4497,
+                longitud: -59.0561
+            },
+            tipoVehiculo: 'AUTO',
+            fechaHora: fechaReserva,
+            zonaHoraria: 'America/Argentina/Cordoba',
+            claveIdempotencia: randomUUID()
+        });
+
+    expect(respuesta.status).toBe(400);
+    expect(respuesta.body.codigo).toBe('DATOS_INCOMPLETOS');
+
+});
+
+it('devuelve 400 cuando origen y destino tienen las mismas coordenadas', async () => {
+
+    const fechaReserva = new Date(
+        Date.now() + 2 * 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const respuesta = await request(app)
+        .post('/reservas')
+        .send({
+            clienteId: '25',
+            origen: {
+                direccion: 'French 414, Resistencia',
+                latitud: -27.4606,
+                longitud: -58.9839
+            },
+            destino: {
+                direccion: 'Otro punto del mapa',
+                latitud: -27.4606,
+                longitud: -58.9839
+            },
+            tipoVehiculo: 'AUTO',
+            fechaHora: fechaReserva,
+            zonaHoraria: 'America/Argentina/Cordoba',
+            claveIdempotencia: randomUUID()
+        });
+
+    expect(respuesta.status).toBe(400);
+    expect(respuesta.body.codigo).toBe('ORIGEN_DESTINO_IGUALES');
+
+});
+
 });

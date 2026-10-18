@@ -14,6 +14,42 @@ import { confirmarReservaAutomaticamente } from '../services/confirmacionReserva
 import { obtenerCoordenadas } from '../services/geocodificacion.service';
 import { calcularDistancia } from '../services/calculoDistancia.service';
 
+
+type UbicacionEntrada =
+    | string
+    | {
+        direccion: string;
+        latitud: number;
+        longitud: number;
+    };
+
+// Acepta una dirección de texto o un objeto con coordenadas válidas
+function esUbicacionValida(valor: unknown): valor is UbicacionEntrada {
+    if (typeof valor === 'string') {
+        return valor.trim().length > 0;
+    }
+
+    if (typeof valor !== 'object' || valor === null || Array.isArray(valor)) {
+        return false;
+    }
+
+    const ubicacion = valor as Record<string, unknown>;
+
+    return (
+        typeof ubicacion.direccion === 'string' &&
+        ubicacion.direccion.trim().length > 0 &&
+        typeof ubicacion.latitud === 'number' &&
+        Number.isFinite(ubicacion.latitud) &&
+        ubicacion.latitud >= -90 &&
+        ubicacion.latitud <= 90 &&
+        typeof ubicacion.longitud === 'number' &&
+        Number.isFinite(ubicacion.longitud) &&
+        ubicacion.longitud >= -180 &&
+        ubicacion.longitud <= 180
+    );
+}
+
+
 // Crear una reserva
 export const crearReservaCtrl = async (req: Request, res: Response) => {
 
@@ -36,10 +72,8 @@ if (
     !datos ||
     typeof datos.clienteId !== 'string' ||
     datos.clienteId.trim() === '' ||
-    typeof datos.origen !== 'string' ||
-    datos.origen.trim() === '' ||
-    typeof datos.destino !== 'string' ||
-    datos.destino.trim() === '' ||
+    !esUbicacionValida(datos.origen) ||
+    !esUbicacionValida(datos.destino) ||
     typeof datos.tipoVehiculo !== 'string' ||
     datos.tipoVehiculo.trim() === '' ||
     typeof datos.fechaHora !== 'string' ||
@@ -52,6 +86,17 @@ if (
         mensaje: 'Faltan datos obligatorios o contienen valores inválidos'
     });
 }
+// Obtener las direcciones independientemente del formato recibido
+const direccionOrigen =
+    typeof datos.origen === 'string'
+        ? datos.origen
+        : datos.origen.direccion;
+
+const direccionDestino =
+    typeof datos.destino === 'string'
+        ? datos.destino
+        : datos.destino.direccion;
+
 // Validamos que el tipo de vehículo sea permitido
 if (
     datos.tipoVehiculo !== 'AUTO' &&
@@ -94,13 +139,26 @@ try {
     if (reservaExistente) {
 
     // Comprobar si los datos coinciden con la reserva original
-    const datosCoinciden =
+    
+const datosCoinciden =
     reservaExistente.clienteId === datos.clienteId &&
-    reservaExistente.origen.direccion === datos.origen &&
-    reservaExistente.destino.direccion === datos.destino &&
+    reservaExistente.origen.direccion === direccionOrigen &&
+    reservaExistente.destino.direccion === direccionDestino &&
+
+    (typeof datos.origen === 'string' || (
+        reservaExistente.origen.latitud === datos.origen.latitud &&
+        reservaExistente.origen.longitud === datos.origen.longitud
+    )) &&
+
+    (typeof datos.destino === 'string' || (
+        reservaExistente.destino.latitud === datos.destino.latitud &&
+        reservaExistente.destino.longitud === datos.destino.longitud
+    )) &&
+
     reservaExistente.tipoVehiculo === datos.tipoVehiculo &&
     reservaExistente.fechaHora.getTime() === fechaHoraReserva.getTime() &&
     reservaExistente.zonaHoraria === datos.zonaHoraria;
+
 
     // Misma clave, pero datos diferentes
     if (!datosCoinciden) {
@@ -200,9 +258,9 @@ let coordenadasDestino;
 // RF-9.3: Validación de ubicaciones
 try {
     const resultadoUbicacion = await validarUbicacion(
-        datos.origen,
-        datos.destino
-    );
+    direccionOrigen,
+    direccionDestino
+);
 
     if (!resultadoUbicacion.valido) {
         return res.status(400).json({
@@ -212,9 +270,23 @@ try {
         });
     }
 
-    // M9 obtiene las coordenadas de las direcciones ingresadas
-    coordenadasOrigen = await obtenerCoordenadas(datos.origen);
-    coordenadasDestino = await obtenerCoordenadas(datos.destino);
+    // Si llegan coordenadas desde el mapa, usarlas directamente.
+// Si llega texto, obtenerlas mediante geocodificación.
+coordenadasOrigen =
+    typeof datos.origen === 'string'
+        ? await obtenerCoordenadas(datos.origen)
+        : {
+            latitud: datos.origen.latitud,
+            longitud: datos.origen.longitud
+        };
+
+coordenadasDestino =
+    typeof datos.destino === 'string'
+        ? await obtenerCoordenadas(datos.destino)
+        : {
+            latitud: datos.destino.latitud,
+            longitud: datos.destino.longitud
+        };
 
     // Verificar que ambas direcciones tengan coordenadas
     if (!coordenadasOrigen || !coordenadasDestino) {
@@ -223,6 +295,16 @@ try {
             mensaje: 'No se pudieron obtener las coordenadas del origen o destino'
         });
     }
+    // No permitir reservas con origen y destino en el mismo punto
+if (
+    coordenadasOrigen.latitud === coordenadasDestino.latitud &&
+    coordenadasOrigen.longitud === coordenadasDestino.longitud
+) {
+    return res.status(400).json({
+        codigo: 'ORIGEN_DESTINO_IGUALES',
+        mensaje: 'El origen y el destino no pueden ser el mismo punto'
+    });
+}
 
     // M9 envía las coordenadas al servicio simulado de M4
 const resultadoDistancia = await calcularDistancia(
@@ -267,12 +349,12 @@ try {
     const nuevaReserva = await insertarReserva(pool, {
         clienteId: datos.clienteId,
         origen: {
-    direccion: datos.origen,
+    direccion: direccionOrigen,
     latitud: coordenadasOrigen.latitud,
     longitud: coordenadasOrigen.longitud
 },
 destino: {
-    direccion: datos.destino,
+    direccion: direccionDestino,
     latitud: coordenadasDestino.latitud,
     longitud: coordenadasDestino.longitud
 },
@@ -349,13 +431,26 @@ return res.status(201).json({
 
             if (reservaExistente) {
 
-                const datosCoinciden =
-                    reservaExistente.clienteId === datos.clienteId &&
-                    reservaExistente.origen.direccion === datos.origen &&
-                    reservaExistente.destino.direccion === datos.destino &&
-                    reservaExistente.tipoVehiculo === datos.tipoVehiculo &&
-                    reservaExistente.fechaHora.getTime() === fechaHoraReserva.getTime() &&
-                    reservaExistente.zonaHoraria === datos.zonaHoraria;
+                
+const datosCoinciden =
+    reservaExistente.clienteId === datos.clienteId &&
+    reservaExistente.origen.direccion === direccionOrigen &&
+    reservaExistente.destino.direccion === direccionDestino &&
+
+    (typeof datos.origen === 'string' || (
+        reservaExistente.origen.latitud === datos.origen.latitud &&
+        reservaExistente.origen.longitud === datos.origen.longitud
+    )) &&
+
+    (typeof datos.destino === 'string' || (
+        reservaExistente.destino.latitud === datos.destino.latitud &&
+        reservaExistente.destino.longitud === datos.destino.longitud
+    )) &&
+
+    reservaExistente.tipoVehiculo === datos.tipoVehiculo &&
+    reservaExistente.fechaHora.getTime() === fechaHoraReserva.getTime() &&
+    reservaExistente.zonaHoraria === datos.zonaHoraria;
+
 
                 if (!datosCoinciden) {
                     return res.status(409).json({
