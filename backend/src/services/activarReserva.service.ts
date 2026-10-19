@@ -1,6 +1,7 @@
 import { transaccion } from '../db/pool';
 import { errores } from '../errors/AppError';
 import { Reserva } from '../models/reserva';
+import { registrarHistorial } from '../repositories/historial.repository';
 import {
   buscarReservaPorId,
   guardarSolicitudDespacho,
@@ -36,6 +37,14 @@ export async function activarReserva(id: string): Promise<Reserva> {
 
     // 3. Guarda el id de la solicitud en la reserva.
     const final = await guardarSolicitudDespacho(db, id, solicitudId);
+
+    // 4. RF-9.12: deja la 'A' en el historial, en la misma transacción.
+    //    Si algo falla antes del COMMIT, se deshace todo junto (estado, solicitud e historial).
+    await registrarHistorial(db, {
+      reservaId: id, tipoCambio: 'ACTIVACION', campoModificado: 'estado',
+      valorAnterior: 'CONFIRMADA', valorNuevo: 'ACTIVADA', rolActor: 'SISTEMA',
+      motivo: `Solicitud de despacho ${solicitudId}`,
+    });
     return final ?? activada;
   });
 }

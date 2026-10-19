@@ -4,8 +4,8 @@ import { randomUUID } from 'crypto';
 import { pool } from '../src/db/pool';
 
 // Simulamos un error técnico en la confirmación automática
-vi.mock('../src/services/confirmacionReserva.service', () => ({
-    confirmarReservaAutomaticamente: vi.fn().mockRejectedValue(
+vi.mock('../src/services/confirmarReserva.service', () => ({
+    confirmarReserva: vi.fn().mockRejectedValue(
         new Error('Error técnico simulado durante la confirmación')
     )
 }));
@@ -54,16 +54,18 @@ describe('Fallo técnico durante la confirmación automática', () => {
 
         const reservaId = resultado.rows[0].id;
 
-        // No debe existir un historial de confirmación
-        const historial = await pool.query(
-            `SELECT id FROM historial_reserva
-            WHERE reserva_id = $1
-            AND tipo_cambio = 'CAMBIO_ESTADO'
-            AND valor_nuevo = 'CONFIRMADA'`,
+        // Queda la creación ('C') en el historial, pero NO la confirmación ('Y')
+        const creacion = await pool.query(
+            `SELECT id FROM historial_reserva WHERE reserva_id = $1 AND tipo_cambio = 'C'`,
+            [reservaId]
+        );
+        const confirmacion = await pool.query(
+            `SELECT id FROM historial_reserva WHERE reserva_id = $1 AND tipo_cambio = 'Y'`,
             [reservaId]
         );
 
-        expect(historial.rows).toHaveLength(0);
+        expect(creacion.rows).toHaveLength(1);
+        expect(confirmacion.rows).toHaveLength(0);
 
     });
 

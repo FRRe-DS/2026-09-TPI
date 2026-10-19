@@ -48,7 +48,9 @@ describe('GET /reservas/:id', () => {
             .get(`/reservas/${idInexistente}`);
 
         expect(respuesta.status).toBe(404);
-        expect(respuesta.body.error).toBe('Reserva no encontrada');
+        expect(respuesta.body.codigo).toBe('NO_ENCONTRADA');
+        expect(respuesta.body).toHaveProperty('mensaje');
+        expect(respuesta.body).toHaveProperty('detalle');
 
     });
 

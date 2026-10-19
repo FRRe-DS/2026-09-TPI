@@ -1,16 +1,85 @@
 import { config } from '../config/env';
-import { errores } from '../errors/AppError';
-import { CambiosReserva, Direccion } from '../models/reserva';
+import { AppError, errores } from '../errors/AppError';
+import { CambiosReserva, Direccion, TipoVehiculo } from '../models/reserva';
+import { verificarClienteHabilitado } from '../stubs/m2Clientes.stub';
+import { consultarRuta } from '../stubs/m4Ubicacion.stub';
+import { estimarTarifa } from '../stubs/m7Tarifas.stub';
+import { obtenerCoordenadas } from './geocodificacion.service';
 
 const CAMPOS = ['origen', 'destino', 'tipoVehiculo', 'fechaHora', 'zonaHoraria'];
 
-// Compartida por creación, confirmación y modificación.
+// RF-9.2: compartida por creación, confirmación y modificación.
+// Siempre responde 422 REGLA_INCUMPLIDA; en "detalle.regla" dice cuál regla falló.
 export function validarVentana(fecha: Date, ahora = new Date()): void {
   const anticipacion = fecha.getTime() - ahora.getTime();
-  if (!Number.isFinite(anticipacion) || anticipacion <= 0 ||
-      anticipacion < config.anticipacionMinimaMinutos * 60_000 ||
-      anticipacion > config.anticipacionMaximaDias * 86_400_000) {
-    throw errores.reglaIncumplida('La fecha está fuera de la ventana de anticipación permitida');
+  if (!Number.isFinite(anticipacion)) {
+    throw errores.datosInvalidos(['fechaHora no es una fecha válida']);
+  }
+  if (anticipacion <= 0) {
+    throw errores.reglaIncumplida('La fecha y hora de la reserva deben ser futuras', {
+      regla: 'FECHA_PASADA',
+    });
+  }
+  if (anticipacion < config.anticipacionMinimaMinutos * 60_000) {
+    throw errores.reglaIncumplida(
+      `La reserva debe realizarse con al menos ${config.anticipacionMinimaMinutos} minutos de anticipación`,
+      { regla: 'ANTICIPACION_INSUFICIENTE' },
+    );
+  }
+  if (anticipacion > config.anticipacionMaximaDias * 86_400_000) {
+    throw errores.reglaIncumplida(
+      `La reserva no puede realizarse con más de ${config.anticipacionMaximaDias} días de anticipación`,
+      { regla: 'ANTICIPACION_EXCEDIDA' },
+    );
+  }
+}
+
+// Origen y destino aceptan los MISMOS dos formatos en POST y en PATCH:
+//  - texto ("UTN"): se buscan las coordenadas con la geocodificación simulada de M4
+//  - objeto { direccion, latitud, longitud }: se usan las coordenadas recibidas (ej. desde el mapa)
+export async function resolverUbicacion(valor: unknown): Promise<Direccion> {
+  if (typeof valor === 'string') {
+    const direccion = valor.trim();
+    if (!direccion) throw errores.datosInvalidos(['La dirección no puede estar vacía']);
+    const coordenadas = await obtenerCoordenadas(direccion);
+    if (!coordenadas) {
+      throw new AppError(400, 'COORDENADAS_NO_DISPONIBLES',
+        'No se pudieron obtener las coordenadas del origen o destino', { direccion });
+    }
+    return { direccion, ...coordenadas };
+  }
+  return validarDireccion(valor);
+}
+
+// RF-9.3: cliente habilitado (simulación de M2). Igual al crear, confirmar y modificar.
+export async function validarClienteHabilitado(clienteId: string): Promise<void> {
+  if (!clienteId?.trim() || !await verificarClienteHabilitado(clienteId)) {
+    throw errores.reglaIncumplida('El cliente no está habilitado para realizar reservas', {
+      regla: 'CLIENTE_NO_HABILITADO',
+    });
+  }
+}
+
+// RF-9.3 y RF-9.4: cobertura y distancia (M4) y tarifa estimada (M7). Una sola "calculadora" para todos.
+export async function validarRutaYEstimarTarifa(
+  origen: Direccion,
+  destino: Direccion,
+  tipoVehiculo: TipoVehiculo,
+): Promise<{ tarifaEstimada: number; distanciaKm: number }> {
+  const ruta = await consultarRuta(origen, destino);
+  if (!ruta.cubierta) {
+    throw errores.reglaIncumplida('El origen o destino está fuera de la zona de cobertura', {
+      regla: 'FUERA_DE_COBERTURA',
+    });
+  }
+  const tarifaEstimada = await estimarTarifa(tipoVehiculo, ruta.distanciaKm);
+  return { tarifaEstimada, distanciaKm: ruta.distanciaKm };
+}
+
+// Origen y destino no pueden ser el mismo punto (se usa al crear y al modificar).
+export function validarOrigenDestinoDistintos(origen: Direccion, destino: Direccion): void {
+  if (origen.latitud === destino.latitud && origen.longitud === destino.longitud) {
+    throw new AppError(400, 'ORIGEN_DESTINO_IGUALES', 'El origen y el destino no pueden ser el mismo punto');
   }
 }
 
@@ -25,7 +94,12 @@ function validarDireccion(valor: unknown): Direccion {
       })) {
     throw errores.datosInvalidos(['La dirección debe incluir texto y coordenadas válidas']);
   }
-  return d;
+  // Se guarda solo lo permitido: nada de campos extra en la base.
+  const limpia: Direccion = { direccion: d.direccion, latitud: d.latitud, longitud: d.longitud };
+  for (const campo of ['alias', 'piso', 'indicaciones'] as const) {
+    if (d[campo] !== undefined) limpia[campo] = d[campo];
+  }
+  return limpia;
 }
 
 export function validarCambios(cuerpo: unknown): CambiosReserva {

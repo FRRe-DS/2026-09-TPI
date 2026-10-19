@@ -169,26 +169,6 @@ export async function cancelarReservaEnBase(
   return rows[0] ? filaAReserva(rows[0]) : null;
 }
 
-export async function actualizarEstadoReserva(
-    db: Ejecutor,
-    reservaId: string,
-    nuevoEstado: 'PENDIENTE' | 'CONFIRMADA'
-): Promise<Reserva | null> {
-
-    const codigoEstado = nuevoEstado === 'CONFIRMADA' ? 'C' : 'P';
-
-    const resultado = await db.query(
-        `UPDATE reserva
-        SET estado = $1, modificada_en = NOW()
-        WHERE id = $2 AND estado = 'P'
-         RETURNING *`,
-        [codigoEstado, reservaId]
-    );
-
-    if (resultado.rows.length === 0) return null;
-
-    return filaAReserva(resultado.rows[0]);
-}
 // ACTIVACIÓN: pasa de CONFIRMADA a ACTIVADA en UNA sola instrucción (el "cartel").
 // Si dos pedidos llegan a la vez, la base deja pasar a uno solo; el otro recibe null.
 export async function tomarReservaParaActivar(db: Ejecutor, id: string): Promise<Reserva | null> {

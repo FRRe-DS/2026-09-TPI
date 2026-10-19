@@ -40,7 +40,8 @@ beforeEach(() => {
 describe('reservas con repositorios simulados (sin base de datos)', () => {
   it('confirma una pendiente y registra tarifa e historial en la transacción recibida', async () => {
     reserva.estado = 'PENDIENTE';
-    expect(await confirmarReserva(id, db)).toMatchObject({ estado: 'CONFIRMADA', tarifaEstimada: 4750 });
+    // AUTO: 1000 + 300 por km; Centro -> Aeropuerto = 7 km
+    expect(await confirmarReserva(id, db)).toMatchObject({ estado: 'CONFIRMADA', tarifaEstimada: 3100 });
     expect(transaccion).not.toHaveBeenCalled();
     expect(registrarHistorial).toHaveBeenCalledExactlyOnceWith(db, expect.objectContaining({ tipoCambio: 'CONFIRMACION' }));
   });
@@ -57,7 +58,8 @@ describe('reservas con repositorios simulados (sin base de datos)', () => {
     const fechaHora = new Date(Date.now() + 2 * 86_400_000).toISOString();
     const res = await request(app).patch(`/reservas/${id}`).send({ fechaHora, tipoVehiculo: 'MOTO' });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ fechaHora, tipoVehiculo: 'MOTO', tarifaEstimada: 3500 });
+    // Misma tarifa que al crear: 1000 + 200 por km en MOTO; Centro -> Aeropuerto = 7 km
+    expect(res.body).toMatchObject({ fechaHora, tipoVehiculo: 'MOTO', tarifaEstimada: 2400 });
     expect(registrarHistorial).toHaveBeenCalledTimes(3);
   });
 
@@ -76,7 +78,21 @@ describe('reservas con repositorios simulados (sin base de datos)', () => {
       const fechaHora = new Date(Date.now() + minutos * 60_000).toISOString();
       const res = await request(app).patch(`/reservas/${id}`).send({ fechaHora });
       expect(res.status).toBe(422);
+      expect(res.body.codigo).toBe('REGLA_INCUMPLIDA');
     }
+    expect(actualizarDatosReserva).not.toHaveBeenCalled();
+  });
+
+  it('acepta origen como texto, igual que al crear', async () => {
+    const res = await request(app).patch(`/reservas/${id}`).send({ origen: 'UTN' });
+    expect(res.status).toBe(200);
+    expect(res.body.origen).toEqual({ direccion: 'UTN', latitud: -27.45, longitud: -58.98 });
+  });
+
+  it('rechaza modificar si origen y destino quedan en el mismo punto', async () => {
+    const res = await request(app).patch(`/reservas/${id}`).send({ origen: 'Aeropuerto' });
+    expect(res.status).toBe(400);
+    expect(res.body.codigo).toBe('ORIGEN_DESTINO_IGUALES');
     expect(actualizarDatosReserva).not.toHaveBeenCalled();
   });
 
