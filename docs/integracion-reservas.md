@@ -48,11 +48,14 @@ Todos los endpoints responden `{ codigo, mensaje, detalle }`:
 
 | HTTP | codigo | Cuándo |
 |---|---|---|
-| 400 | DATOS_INCOMPLETOS, DATOS_INVALIDOS, TIPO_VEHICULO_INVALIDO, FECHA_INVALIDA, ZONA_HORARIA_INVALIDA, CLAVE_IDEMPOTENCIA_INVALIDA, ID_INVALIDO, COORDENADAS_NO_DISPONIBLES, ORIGEN_DESTINO_IGUALES, CLIENTE_ID_REQUERIDO | Datos mal enviados |
-| 404 | NO_ENCONTRADA | La reserva no existe |
+| 400 | DATOS_INCOMPLETOS, DATOS_INVALIDOS, TIPO_VEHICULO_INVALIDO, FECHA_INVALIDA, ZONA_HORARIA_INVALIDA, CLAVE_IDEMPOTENCIA_INVALIDA, ID_INVALIDO, COORDENADAS_NO_DISPONIBLES, ORIGEN_DESTINO_IGUALES, CLIENTE_ID_REQUERIDO, JSON_INVALIDO | Datos mal enviados |
+| 404 | NO_ENCONTRADA, RUTA_NO_ENCONTRADA | La reserva no existe, o la ruta no existe |
 | 409 | CONFLICTO, CONFLICTO_IDEMPOTENCIA | Ya activada/cancelada, o clave reutilizada con otros datos |
 | 422 | REGLA_INCUMPLIDA | Regla de negocio. `detalle.regla`: FECHA_PASADA, ANTICIPACION_INSUFICIENTE, ANTICIPACION_EXCEDIDA, CLIENTE_NO_HABILITADO, FUERA_DE_COBERTURA o LIMITE_MODIFICACION_SUPERADO |
+| 500 | ERROR_INTERNO | Error inesperado (queda en el log del servidor) |
 | 503 | SERVICIO_NO_DISPONIBLE | M5 no pudo crear la solicitud de despacho |
+
+`GET /health` es la excepción: responde `{ estado, servicio, baseDeDatos }` (503 si no llega a la base).
 
 ## Pruebas
 

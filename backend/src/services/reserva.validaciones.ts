@@ -51,7 +51,7 @@ export async function resolverUbicacion(valor: unknown): Promise<Direccion> {
   return validarDireccion(valor);
 }
 
-// RF-9.3: cliente habilitado (simulación de M2). Igual al crear, confirmar y modificar.
+// RF-9.3: cliente habilitado (simulación de M2). La usan crear y confirmar.
 export async function validarClienteHabilitado(clienteId: string): Promise<void> {
   if (!clienteId?.trim() || !await verificarClienteHabilitado(clienteId)) {
     throw errores.reglaIncumplida('El cliente no está habilitado para realizar reservas', {
