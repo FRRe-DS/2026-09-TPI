@@ -5,9 +5,23 @@ import { errores } from '../errors/AppError';
 import { CambiosReserva, Reserva } from '../models/reserva';
 import { listarHistorial, registrarHistorial } from '../repositories/historial.repository';
 import { actualizarDatosReserva, buscarReservaPorId, cancelarReservaEnBase } from '../repositories/reserva.repository';
-import { consultarRuta } from '../stubs/m4Ubicacion.stub';
-import { estimarTarifa } from '../stubs/m7Tarifas.stub';
-import { validarCambios, validarVentana } from './reserva.validaciones';
+import {
+  resolverUbicacion,
+  validarCambios,
+  validarOrigenDestinoDistintos,
+  validarRutaYEstimarTarifa,
+  validarVentana,
+} from './reserva.validaciones';
+
+// Origen y destino aceptan texto u objeto con coordenadas, igual que al crear.
+async function resolverUbicacionesDelCuerpo(cuerpo: unknown): Promise<unknown> {
+  if (!cuerpo || typeof cuerpo !== 'object' || Array.isArray(cuerpo)) return cuerpo;
+  const datos = { ...(cuerpo as Record<string, unknown>) };
+  for (const campo of ['origen', 'destino'] as const) {
+    if (typeof datos[campo] === 'string') datos[campo] = await resolverUbicacion(datos[campo]);
+  }
+  return datos;
+}
 
 async function buscarOFallar(db: PoolClient, id: string): Promise<Reserva> {
   const reserva = await buscarReservaPorId(db, id, true);
@@ -22,19 +36,25 @@ function asegurarEditable(reserva: Reserva): void {
 }
 
 export async function modificarReserva(id: string, cuerpo: unknown, actorId: string, rolActor = 'CLIENTE') {
-  const cambios = validarCambios(cuerpo);
+  const cambios = validarCambios(await resolverUbicacionesDelCuerpo(cuerpo));
   return transaccion(async (db) => {
     const actual = await buscarOFallar(db, id);
     asegurarEditable(actual);
     const ahora = new Date();
     if (actual.fechaHora.getTime() - ahora.getTime() < config.anticipacionMinimaMinutos * 60_000) {
-      throw errores.reglaIncumplida('Ya pasó el límite temporal para modificar la reserva');
+      throw errores.reglaIncumplida('Ya pasó el límite temporal para modificar la reserva', {
+        regla: 'LIMITE_MODIFICACION_SUPERADO',
+      });
     }
     if (cambios.fechaHora) validarVentana(cambios.fechaHora, ahora);
     if (cambios.origen || cambios.destino || cambios.tipoVehiculo) {
-      const ruta = await consultarRuta(cambios.origen ?? actual.origen, cambios.destino ?? actual.destino);
-      if (!ruta.cubierta) throw errores.reglaIncumplida('El recorrido está fuera de cobertura');
-      cambios.tarifaEstimada = await estimarTarifa(cambios.tipoVehiculo ?? actual.tipoVehiculo, ruta.distanciaKm);
+      const origen = cambios.origen ?? actual.origen;
+      const destino = cambios.destino ?? actual.destino;
+      validarOrigenDestinoDistintos(origen, destino);
+      const { tarifaEstimada } = await validarRutaYEstimarTarifa(
+        origen, destino, cambios.tipoVehiculo ?? actual.tipoVehiculo,
+      );
+      cambios.tarifaEstimada = tarifaEstimada;
     }
     const campos = (Object.keys(cambios) as (keyof CambiosReserva)[])
       .filter((campo) => JSON.stringify(actual[campo]) !== JSON.stringify(cambios[campo]));

@@ -4,56 +4,77 @@ import { randomUUID } from 'crypto';
 import { app } from '../src/app';
 import { pool } from '../src/db/pool';
 
-describe('Historial de confirmación automática', () => {
+// RF-9.12: cada cambio de estado deja su fila en historial_reserva, escrita por el backend.
+function datosReserva() {
+    return {
+        clienteId: '25',
+        origen: 'UTN',
+        destino: 'Aeropuerto',
+        tipoVehiculo: 'AUTO',
+        fechaHora: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        zonaHoraria: 'America/Argentina/Cordoba',
+        claveIdempotencia: randomUUID()
+    };
+}
 
-    it('registra el cambio de PENDIENTE a CONFIRMADA', async () => {
+async function filasDeHistorial(reservaId: string, tipoCambio: string) {
+    const { rows } = await pool.query(
+        `SELECT * FROM historial_reserva
+         WHERE reserva_id = $1 AND tipo_cambio = $2 AND campo_modificado = 'estado'`,
+        [reservaId, tipoCambio]
+    );
+    return rows;
+}
 
-        // Programamos una reserva para dentro de 2 días
-        const fechaReserva = new Date(
-            Date.now() + 2 * 24 * 60 * 60 * 1000
-        ).toISOString();
+describe('Historial de la reserva', () => {
 
-        // Creamos una reserva válida
-        const respuesta = await request(app)
-            .post('/reservas')
-            .send({
-                clienteId: '25',
-                origen: 'UTN',
-                destino: 'Aeropuerto',
-                tipoVehiculo: 'AUTO',
-                fechaHora: fechaReserva,
-                zonaHoraria: 'America/Argentina/Cordoba',
-                claveIdempotencia: randomUUID()
-            });
+    it('registra la creación (C) hecha por el cliente', async () => {
+
+        const respuesta = await request(app).post('/reservas').send(datosReserva());
+        expect(respuesta.status).toBe(201);
+
+        const filas = await filasDeHistorial(respuesta.body.reserva.id, 'C');
+        expect(filas).toHaveLength(1);
+        expect(filas[0].valor_anterior).toBeNull();
+        expect(filas[0].valor_nuevo).toBe('PENDIENTE');
+        expect(filas[0].actor_id).toBe('25');
+        expect(filas[0].rol_actor).toBe('C');
+
+    });
+
+    it('registra el cambio de PENDIENTE a CONFIRMADA (Y) hecho por el sistema', async () => {
+
+        const respuesta = await request(app).post('/reservas').send(datosReserva());
 
         // Verificamos que se creó y confirmó
         expect(respuesta.status).toBe(201);
         expect(respuesta.body.reserva.estado).toBe('CONFIRMADA');
 
-        // Obtenemos el ID de la reserva creada
-        const reservaId = respuesta.body.reserva.id;
-
-     // Consultamos el historial directamente en PostgreSQL
-        const resultado = await pool.query(
-    `SELECT *
-    FROM historial_reserva
-    WHERE reserva_id = $1
-    AND tipo_cambio = 'Y'
-    AND campo_modificado = 'estado'`,
-    [reservaId]
-);
         // Debe existir exactamente un registro de confirmación
-        expect(resultado.rows).toHaveLength(1);
-
-        const historial = resultado.rows[0];
+        const filas = await filasDeHistorial(respuesta.body.reserva.id, 'Y');
+        expect(filas).toHaveLength(1);
 
         // Comprobamos los estados registrados
-        expect(historial.valor_anterior).toBe('P');
-        expect(historial.valor_nuevo).toBe('C');
+        expect(filas[0].valor_anterior).toBe('PENDIENTE');
+        expect(filas[0].valor_nuevo).toBe('CONFIRMADA');
 
         // Comprobamos quién realizó el cambio
-        expect(historial.actor_id).toBeNull();
-        expect(historial.rol_actor).toBe('S');
+        expect(filas[0].actor_id).toBeNull();
+        expect(filas[0].rol_actor).toBe('S');
+
+    });
+
+    it('el historial completo sale ordenado por GET /reservas/:id/historial', async () => {
+
+        const creada = await request(app).post('/reservas').send(datosReserva());
+        const id = creada.body.reserva.id;
+
+        await request(app).post(`/reservas/${id}/activar`).expect(200);
+
+        const historial = await request(app).get(`/reservas/${id}/historial`);
+        expect(historial.status).toBe(200);
+        expect(historial.body.map((h: { tipoCambio: string }) => h.tipoCambio))
+            .toEqual(['CREACION', 'CONFIRMACION', 'ACTIVACION']);
 
     });
 

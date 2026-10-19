@@ -1,0 +1,12 @@
+name: Deploy a Render
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Avisar a Render que hay cambios en main
+        run: curl -fsS -X POST "${{ secrets.RENDER_DEPLOY_HOOK }}"

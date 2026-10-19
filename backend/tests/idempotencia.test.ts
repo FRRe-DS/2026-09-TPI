@@ -114,4 +114,53 @@ describe('Idempotencia en POST /reservas', () => {
 
 });
 
+it('devuelve 409 si se reutiliza la clave con coordenadas diferentes', async () => {
+
+    const claveIdempotencia = randomUUID();
+
+    const datosReserva = {
+        clienteId: '25',
+        origen: {
+            direccion: 'French 414, Resistencia',
+            latitud: -27.4606,
+            longitud: -58.9839
+        },
+        destino: {
+            direccion: 'Aeropuerto Resistencia',
+            latitud: -27.4497,
+            longitud: -59.0561
+        },
+        tipoVehiculo: 'AUTO',
+        fechaHora: new Date(
+            Date.now() + 2 * 24 * 60 * 60 * 1000
+        ).toISOString(),
+        zonaHoraria: 'America/Argentina/Cordoba',
+        claveIdempotencia
+    };
+
+    // Primera solicitud: crea la reserva
+    const primeraRespuesta = await request(app)
+        .post('/reservas')
+        .send(datosReserva);
+
+    expect(primeraRespuesta.status).toBe(201);
+
+    // Segunda solicitud: misma clave y dirección,
+    // pero con una latitud diferente
+    const segundaRespuesta = await request(app)
+        .post('/reservas')
+        .send({
+            ...datosReserva,
+            origen: {
+                ...datosReserva.origen,
+                latitud: -27.4700
+            }
+        });
+
+    expect(segundaRespuesta.status).toBe(409);
+    expect(segundaRespuesta.body.codigo)
+        .toBe('CONFLICTO_IDEMPOTENCIA');
+
+});
+
 });
