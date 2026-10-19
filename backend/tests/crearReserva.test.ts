@@ -43,7 +43,7 @@ describe('POST /reservas', () => {
 
     });
 
-    it('devuelve 400 cuando la anticipación es insuficiente', async () => {
+    it('devuelve 422 cuando la anticipación es insuficiente', async () => {
 
     // Programamos la reserva para dentro de 10 minutos
     const fechaReserva = new Date(
@@ -62,11 +62,12 @@ describe('POST /reservas', () => {
             claveIdempotencia: '550e8400-e29b-41d4-a716-446655440022'
         });
 
-    expect(respuesta.status).toBe(400);
-    expect(respuesta.body.codigo).toBe('ANTICIPACION_INSUFICIENTE');
+    expect(respuesta.status).toBe(422);
+    expect(respuesta.body.codigo).toBe('REGLA_INCUMPLIDA');
+    expect(respuesta.body.detalle.regla).toBe('ANTICIPACION_INSUFICIENTE');
 
 });
-it('devuelve 400 cuando se supera la anticipación máxima', async () => {
+it('devuelve 422 cuando se supera la anticipación máxima', async () => {
 
     // Programamos la reserva para dentro de 31 días
     const fechaReserva = new Date(
@@ -85,8 +86,9 @@ it('devuelve 400 cuando se supera la anticipación máxima', async () => {
             claveIdempotencia: '550e8400-e29b-41d4-a716-446655440023'
         });
 
-    expect(respuesta.status).toBe(400);
-    expect(respuesta.body.codigo).toBe('ANTICIPACION_EXCEDIDA');
+    expect(respuesta.status).toBe(422);
+    expect(respuesta.body.codigo).toBe('REGLA_INCUMPLIDA');
+    expect(respuesta.body.detalle.regla).toBe('ANTICIPACION_EXCEDIDA');
 
 });
 
@@ -126,7 +128,7 @@ it('devuelve 400 cuando la zona horaria es inválida', async () => {
     expect(respuesta.body.codigo).toBe('ZONA_HORARIA_INVALIDA');
 
 });
-it('devuelve 400 cuando el origen está fuera de cobertura', async () => {
+it('devuelve 422 cuando el origen está fuera de cobertura', async () => {
 
     const fechaReserva = new Date(
         Date.now() + 2 * 24 * 60 * 60 * 1000
@@ -136,7 +138,11 @@ it('devuelve 400 cuando el origen está fuera de cobertura', async () => {
         .post('/reservas')
         .send({
             clienteId: '25',
-            origen: 'FUERA_COBERTURA',
+            origen: {
+                direccion: 'Ruta 11 km 1000 FUERA DE ZONA',
+                latitud: -26.18,
+                longitud: -58.17
+            },
             destino: 'Aeropuerto',
             tipoVehiculo: 'AUTO',
             fechaHora: fechaReserva,
@@ -144,11 +150,12 @@ it('devuelve 400 cuando el origen está fuera de cobertura', async () => {
             claveIdempotencia: randomUUID()
         });
 
-    expect(respuesta.status).toBe(400);
-    expect(respuesta.body.codigo).toBe('UBICACION_INVALIDA');
+    expect(respuesta.status).toBe(422);
+    expect(respuesta.body.codigo).toBe('REGLA_INCUMPLIDA');
+    expect(respuesta.body.detalle.regla).toBe('FUERA_DE_COBERTURA');
 
 });
-it('devuelve 403 cuando el cliente está bloqueado', async () => {
+it('devuelve 422 cuando el cliente está bloqueado', async () => {
 
     const fechaReserva = new Date(
         Date.now() + 2 * 24 * 60 * 60 * 1000
@@ -157,7 +164,7 @@ it('devuelve 403 cuando el cliente está bloqueado', async () => {
     const respuesta = await request(app)
         .post('/reservas')
         .send({
-            clienteId: 'CLIENTE_BLOQUEADO',
+            clienteId: 'bloqueado-001',
             origen: 'UTN',
             destino: 'Aeropuerto',
             tipoVehiculo: 'AUTO',
@@ -166,11 +173,13 @@ it('devuelve 403 cuando el cliente está bloqueado', async () => {
             claveIdempotencia: randomUUID()
         });
 
-    expect(respuesta.status).toBe(403);
-    expect(respuesta.body.codigo).toBe('CLIENTE_NO_HABILITADO');
+    expect(respuesta.status).toBe(422);
+    expect(respuesta.body.codigo).toBe('REGLA_INCUMPLIDA');
+    expect(respuesta.body.detalle.regla).toBe('CLIENTE_NO_HABILITADO');
 
 });
-it('crea una reserva AUTO con tarifa estimada de 5000', async () => {
+// Tarifa simulada de M7: 1000 + 300 por km (AUTO) o 200 por km (MOTO). UTN -> Aeropuerto = 7 km.
+it('crea una reserva AUTO con tarifa estimada según los km (3100)', async () => {
 
     const fechaReserva = new Date(
         Date.now() + 2 * 24 * 60 * 60 * 1000
@@ -189,11 +198,11 @@ it('crea una reserva AUTO con tarifa estimada de 5000', async () => {
         });
 
     expect(respuesta.status).toBe(201);
-    expect(Number(respuesta.body.reserva.tarifaEstimada)).toBe(5000);
+    expect(Number(respuesta.body.reserva.tarifaEstimada)).toBe(3100);
     expect(respuesta.body.reserva.estado).toBe('CONFIRMADA');
 
 });
-it('crea una reserva MOTO con tarifa estimada de 3000', async () => {
+it('crea una reserva MOTO con tarifa estimada según los km (2400)', async () => {
 
     const fechaReserva = new Date(
         Date.now() + 2 * 24 * 60 * 60 * 1000
@@ -212,7 +221,7 @@ it('crea una reserva MOTO con tarifa estimada de 3000', async () => {
         });
 
     expect(respuesta.status).toBe(201);
-    expect(Number(respuesta.body.reserva.tarifaEstimada)).toBe(3000);
+    expect(Number(respuesta.body.reserva.tarifaEstimada)).toBe(2400);
     expect(respuesta.body.reserva.estado).toBe('CONFIRMADA');
 
 });
@@ -318,6 +327,36 @@ it('devuelve 400 cuando origen y destino tienen las mismas coordenadas', async (
 
     expect(respuesta.status).toBe(400);
     expect(respuesta.body.codigo).toBe('ORIGEN_DESTINO_IGUALES');
+
+});
+
+it('todos los errores usan el formato { codigo, mensaje, detalle }', async () => {
+
+    const respuesta = await request(app)
+        .post('/reservas')
+        .send({ claveIdempotencia: 'no-es-uuid' });
+
+    expect(respuesta.status).toBe(400);
+    expect(Object.keys(respuesta.body).sort()).toEqual(['codigo', 'detalle', 'mensaje']);
+
+});
+
+it('devuelve 422 cuando la fecha ya pasó', async () => {
+
+    const respuesta = await request(app)
+        .post('/reservas')
+        .send({
+            clienteId: '25',
+            origen: 'UTN',
+            destino: 'Aeropuerto',
+            tipoVehiculo: 'AUTO',
+            fechaHora: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+            zonaHoraria: 'America/Argentina/Cordoba',
+            claveIdempotencia: randomUUID()
+        });
+
+    expect(respuesta.status).toBe(422);
+    expect(respuesta.body.detalle.regla).toBe('FECHA_PASADA');
 
 });
 

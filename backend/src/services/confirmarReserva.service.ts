@@ -4,12 +4,15 @@ import { errores } from '../errors/AppError';
 import { Reserva } from '../models/reserva';
 import { registrarHistorial } from '../repositories/historial.repository';
 import { buscarReservaPorId, confirmarReservaEnBase } from '../repositories/reserva.repository';
-import { verificarClienteHabilitado } from '../stubs/m2Clientes.stub';
-import { consultarRuta } from '../stubs/m4Ubicacion.stub';
-import { estimarTarifa } from '../stubs/m7Tarifas.stub';
-import { validarCambios, validarVentana } from './reserva.validaciones';
+import {
+  validarCambios,
+  validarClienteHabilitado,
+  validarRutaYEstimarTarifa,
+  validarVentana,
+} from './reserva.validaciones';
 
-// Después de crear: confirmarReserva(creada.id, db). Sin db abre su propia transacción.
+// RF-9.5: pasa una reserva de PENDIENTE a CONFIRMADA y deja la 'Y' en el historial (RF-9.12),
+// las dos cosas en la misma transacción. Sin db abre su propia transacción.
 export async function confirmarReserva(id: string, db?: PoolClient): Promise<Reserva> {
   const confirmar = async (cliente: PoolClient) => {
     const reserva = await buscarReservaPorId(cliente, id, true);
@@ -18,13 +21,9 @@ export async function confirmarReserva(id: string, db?: PoolClient): Promise<Res
     const { origen, destino, tipoVehiculo, fechaHora, zonaHoraria } = reserva;
     validarCambios({ origen, destino, tipoVehiculo, fechaHora, zonaHoraria });
     validarVentana(fechaHora);
-    if (!reserva.clienteId?.trim() || !await verificarClienteHabilitado(reserva.clienteId)) {
-      throw errores.reglaIncumplida('El cliente no está habilitado');
-    }
-    const ruta = await consultarRuta(origen, destino);
-    if (!ruta.cubierta) throw errores.reglaIncumplida('El recorrido está fuera de cobertura');
-    const tarifa = await estimarTarifa(tipoVehiculo, ruta.distanciaKm);
-    const confirmada = await confirmarReservaEnBase(cliente, id, tarifa);
+    await validarClienteHabilitado(reserva.clienteId);
+    const { tarifaEstimada } = await validarRutaYEstimarTarifa(origen, destino, tipoVehiculo);
+    const confirmada = await confirmarReservaEnBase(cliente, id, tarifaEstimada);
     if (!confirmada) throw errores.conflicto('La reserva cambió de estado mientras se confirmaba');
     await registrarHistorial(cliente, {
       reservaId: id, tipoCambio: 'CONFIRMACION', campoModificado: 'estado',

@@ -11,13 +11,16 @@ describe('ayudas de prueba', () => {
     expect(reserva.estado).toBe('CONFIRMADA');
   });
 
-  it('el trigger de la base deja una fila de historial de creación', async () => {
+  // El historial lo escribe el backend desde los servicios, no un trigger de la base.
+  // crearReservaDePrueba inserta directo (sin pasar por los servicios), así que no deja historial.
+  // Si este test falla, alguien volvió a poner el trigger viejo y el historial quedaría duplicado.
+  it('la base no escribe historial sola (no existe el trigger viejo)', async () => {
     const reserva = await crearReservaDePrueba();
     const { rows } = await pool.query(
-      `SELECT count(*)::int AS n FROM historial_reserva WHERE reserva_id = $1 AND tipo_cambio = 'C'`,
+      `SELECT count(*)::int AS n FROM historial_reserva WHERE reserva_id = $1`,
       [reserva.id],
     );
-    expect(rows[0].n).toBe(1);
+    expect(rows[0].n).toBe(0);
   });
 
   it('limpiarBase vacía las tablas', async () => {

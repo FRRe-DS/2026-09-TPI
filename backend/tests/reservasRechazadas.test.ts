@@ -13,7 +13,7 @@ describe('Reservas rechazadas', () => {
         const respuesta = await request(app)
             .post('/reservas')
             .send({
-                clienteId: 'CLIENTE_BLOQUEADO',
+                clienteId: 'bloqueado-001',
                 origen: 'UTN',
                 destino: 'Aeropuerto',
                 tipoVehiculo: 'AUTO',
@@ -24,8 +24,9 @@ describe('Reservas rechazadas', () => {
                 claveIdempotencia
             });
 
-        expect(respuesta.status).toBe(403);
-        expect(respuesta.body.codigo).toBe('CLIENTE_NO_HABILITADO');
+        expect(respuesta.status).toBe(422);
+        expect(respuesta.body.codigo).toBe('REGLA_INCUMPLIDA');
+        expect(respuesta.body.detalle.regla).toBe('CLIENTE_NO_HABILITADO');
 
         // Comprobamos que no se guardó en PostgreSQL
         const resultado = await pool.query(
@@ -45,7 +46,11 @@ describe('Reservas rechazadas', () => {
             .post('/reservas')
             .send({
                 clienteId: '25',
-                origen: 'FUERA_COBERTURA',
+                origen: {
+                    direccion: 'Ruta 11 km 1000 FUERA DE ZONA',
+                    latitud: -26.18,
+                    longitud: -58.17
+                },
                 destino: 'Aeropuerto',
                 tipoVehiculo: 'AUTO',
                 fechaHora: new Date(
@@ -55,8 +60,9 @@ describe('Reservas rechazadas', () => {
                 claveIdempotencia
             });
 
-        expect(respuesta.status).toBe(400);
-        expect(respuesta.body.codigo).toBe('UBICACION_INVALIDA');
+        expect(respuesta.status).toBe(422);
+        expect(respuesta.body.codigo).toBe('REGLA_INCUMPLIDA');
+        expect(respuesta.body.detalle.regla).toBe('FUERA_DE_COBERTURA');
 
         // Comprobamos que no se guardó en PostgreSQL
         const resultado = await pool.query(
