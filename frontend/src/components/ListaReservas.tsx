@@ -13,6 +13,14 @@ export function ListaReservas({ reservas, onCambio }: Props) {
   const [motivo, setMotivo] = useState('');
   const [enviando, setEnviando] = useState(false);
 
+  // Ordena por fecha del viaje (el más cercano arriba) y deja las canceladas al final
+  const ordenadas = [...reservas].sort((a, b) => {
+    const aCancelada = a.estado === 'CANCELADA' ? 1 : 0;
+    const bCancelada = b.estado === 'CANCELADA' ? 1 : 0;
+    if (aCancelada !== bCancelada) return aCancelada - bCancelada;
+    return new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime();
+  });
+
   function abrir(id: string) {
     setCancelandoId(id);
     setMotivo('');
@@ -64,7 +72,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
               </tr>
             </thead>
             <tbody>
-              {reservas.map((r) => {
+              {ordenadas.map((r) => {
                 const noCancelable =
                   r.estado === 'CANCELADA' || r.estado === 'ACTIVADA' || r.estado === 'VENCIDA';
                 return (
