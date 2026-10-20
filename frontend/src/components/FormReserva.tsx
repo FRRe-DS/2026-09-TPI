@@ -29,7 +29,7 @@ export function FormReserva({ clienteId, onCreada }: Props) {
         setEstado('guardando');
         setMensaje('Guardando…');
         try {
-            await reservasApi.crear({
+            const { reserva, motivo } = await reservasApi.crear({
                 clienteId,
                 origen,
                 destino,
@@ -38,7 +38,12 @@ export function FormReserva({ clienteId, onCreada }: Props) {
                 zonaHoraria: Intl.DateTimeFormat().resolvedOptions().timeZone,
             });
             setEstado('ok');
-            setMensaje('Reserva creada');
+            // Si no se pudo confirmar automáticamente, la reserva queda PENDIENTE y el backend dice por qué
+            setMensaje(
+                reserva.estado === 'PENDIENTE'
+                    ? `Reserva creada, pendiente de confirmación${motivo ? `: ${motivo}` : ''}`
+                    : 'Reserva creada y confirmada',
+            );
             setOrigen(null);
             setDestino(null);
             setFechaHora('');

@@ -33,8 +33,9 @@ export function ListaReservas({ reservas, onCambio }: Props) {
   }
 
   async function confirmar(id: string) {
-    if (!motivo.trim()) {
-      setError('Escribí un motivo para cancelar');
+    // El backend exige un motivo de al menos 3 caracteres
+    if (motivo.trim().length < 3) {
+      setError('Escribí un motivo de al menos 3 caracteres para cancelar');
       return;
     }
     setEnviando(true);

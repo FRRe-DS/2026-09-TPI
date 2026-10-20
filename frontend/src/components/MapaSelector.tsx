@@ -53,10 +53,12 @@ async function buscarLugares(texto: string): Promise<Ubicacion[]> {
         const p = f.properties;
         const calle = [p.street, p.housenumber].filter(Boolean).join(' ');
         const nombre = p.name && p.name !== p.street ? p.name : undefined;
+        const [lon, lat] = f.geometry.coordinates;
         return {
-          direccion: armarTexto([nombre, calle, p.city, p.state]),
-          latitud: f.geometry.coordinates[1],
-          longitud: f.geometry.coordinates[0],
+          // El backend rechaza direcciones vacías: si el lugar no trae datos, usamos las coordenadas
+          direccion: armarTexto([nombre, calle, p.city, p.state]) || `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+          latitud: lat,
+          longitud: lon,
         };
       },
     );
