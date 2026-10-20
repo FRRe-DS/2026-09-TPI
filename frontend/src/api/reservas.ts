@@ -11,9 +11,15 @@ export class ApiError extends Error {
     }
 }
 
+// Lo que nos interesa de la respuesta al crear: la reserva y, si quedó PENDIENTE, el motivo
+export interface ResultadoCreacion {
+    reserva: Reserva;
+    motivo?: string;
+}
+
 interface ReservasApi {
     listar(clienteId: string): Promise<Reserva[]>;
-    crear(datos: NuevaReserva): Promise<Reserva>;
+    crear(datos: NuevaReserva): Promise<ResultadoCreacion>;
     cancelar(id: string, motivo: string): Promise<Reserva>;
 }
 
@@ -34,6 +40,10 @@ async function pedir<T>(ruta: string, opciones?: RequestInit): Promise<T> {
         try {
             const err: ErrorApi = await res.json();
             if (err.mensaje) mensaje = err.mensaje;
+            // Si el backend explica qué dato falló (lista de textos en "detalle"), lo sumamos al mensaje
+            if (Array.isArray(err.detalle) && err.detalle.every((d) => typeof d === 'string')) {
+                mensaje = `${mensaje}: ${err.detalle.join('; ')}`;
+            }
         } catch {
             // la respuesta no trajo JSON
         }
@@ -46,13 +56,13 @@ const real: ReservasApi = {
     listar: (clienteId) =>
         pedir<Reserva[]>(`/reservas?clienteId=${encodeURIComponent(clienteId)}`),
     // El backend pide una claveIdempotencia (UUID) para no crear dos veces la misma reserva,
-    // y responde { mensaje, reserva, condiciones }: nos quedamos con la reserva.
+    // y responde { mensaje, motivo, reserva, condiciones }: nos quedamos con la reserva y el motivo.
     crear: async (datos) => {
-        const respuesta = await pedir<{ reserva: Reserva }>('/reservas', {
+        const respuesta = await pedir<ResultadoCreacion>('/reservas', {
             method: 'POST',
             body: JSON.stringify({ ...datos, claveIdempotencia: crypto.randomUUID() }),
         });
-        return respuesta.reserva;
+        return { reserva: respuesta.reserva, motivo: respuesta.motivo };
     },
     cancelar: (id, motivo) =>
         pedir<Reserva>(`/reservas/${id}/cancelar`, {
@@ -80,8 +90,8 @@ const mock: ReservasApi = {
     const nueva: Reserva = {
       ...datos,
       id: crypto.randomUUID(),
-      origen: { direccion: datos.origen, latitud: 0, longitud: 0 },
-      destino: { direccion: datos.destino, latitud: 0, longitud: 0 },
+      origen: datos.origen,
+      destino: datos.destino,
       estado: 'CONFIRMADA',
       tarifaEstimada: 4500,
       motivoCancelacion: null,
@@ -89,7 +99,7 @@ const mock: ReservasApi = {
       creadaEn: ahora,
     };
         reservasMock = [nueva, ...reservasMock];
-        return nueva;
+        return { reserva: nueva };
     },
     async cancelar(id, motivo) {
         await esperar();

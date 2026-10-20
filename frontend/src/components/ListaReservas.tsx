@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { reservasApi, ApiError } from '../api/reservas';
 import type { Reserva } from '../types';
 
@@ -13,6 +13,14 @@ export function ListaReservas({ reservas, onCambio }: Props) {
   const [motivo, setMotivo] = useState('');
   const [enviando, setEnviando] = useState(false);
 
+  // Ordena por fecha del viaje (el más cercano arriba) y deja las canceladas al final
+  const ordenadas = [...reservas].sort((a, b) => {
+    const aCancelada = a.estado === 'CANCELADA' ? 1 : 0;
+    const bCancelada = b.estado === 'CANCELADA' ? 1 : 0;
+    if (aCancelada !== bCancelada) return aCancelada - bCancelada;
+    return new Date(a.fechaHora).getTime() - new Date(b.fechaHora).getTime();
+  });
+
   function abrir(id: string) {
     setCancelandoId(id);
     setMotivo('');
@@ -25,8 +33,9 @@ export function ListaReservas({ reservas, onCambio }: Props) {
   }
 
   async function confirmar(id: string) {
-    if (!motivo.trim()) {
-      setError('Escribí un motivo para cancelar');
+    // El backend exige un motivo de al menos 3 caracteres
+    if (motivo.trim().length < 3) {
+      setError('Escribí un motivo de al menos 3 caracteres para cancelar');
       return;
     }
     setEnviando(true);
@@ -51,50 +60,76 @@ export function ListaReservas({ reservas, onCambio }: Props) {
       {reservas.length === 0 ? (
         <p>No tenés reservas todavía.</p>
       ) : (
-        <ul className="lista">
-          {reservas.map((r) => {
-            const noCancelable =
-              r.estado === 'CANCELADA' || r.estado === 'ACTIVADA' || r.estado === 'VENCIDA';
-            return (
-              <li key={r.id}>
-                <div>
-                  <strong>
-                    {r.origen.direccion} → {r.destino.direccion}
-                  </strong>
-                  <span>
-                    {r.tipoVehiculo} · {new Date(r.fechaHora).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short', hour12: false })}
-                  </span>
-                  {r.tarifaEstimada != null && (
-                    <span>Tarifa estimada: ${r.tarifaEstimada}</span>
-                  )}
-                  {r.motivoCancelacion && <span>Motivo: {r.motivoCancelacion}</span>}
-                </div>
-                <span className={`estado ${r.estado.toLowerCase()}`}>{r.estado}</span>
+        <div className="tabla-contenedor">
+          <table className="tabla">
+            <thead>
+              <tr>
+                <th>Viaje</th>
+                <th>Vehículo</th>
+                <th>Fecha</th>
+                <th>Tarifa</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordenadas.map((r) => {
+                const noCancelable =
+                  r.estado === 'CANCELADA' || r.estado === 'ACTIVADA' || r.estado === 'VENCIDA';
+                return (
+                  <Fragment key={r.id}>
+                    <tr className={r.estado.toLowerCase()}>
+                      <td>
+                        <strong>
+                          {r.origen.direccion} → {r.destino.direccion}
+                        </strong>
+                        {r.motivoCancelacion && (
+                          <span className="motivo">Motivo: {r.motivoCancelacion}</span>
+                        )}
+                      </td>
+                      <td>{r.tipoVehiculo}</td>
+                      <td>
+                        {new Date(r.fechaHora).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short', hour12: false })}
+                      </td>
+                      <td>{r.tarifaEstimada != null ? `$${r.tarifaEstimada}` : '-'}</td>
+                      <td>
+                        <span className={`estado ${r.estado.toLowerCase()}`}>{r.estado}</span>
+                      </td>
+                      <td>
+                        {cancelandoId !== r.id && (
+                          <button className="btn-cancelar" onClick={() => abrir(r.id)} disabled={noCancelable}>
+                            Cancelar
+                          </button>
+                        )}
+                      </td>
+                    </tr>
 
-                {cancelandoId === r.id ? (
-                  <div className="cancelar">
-                    <input
-                      placeholder="Motivo de la cancelación"
-                      value={motivo}
-                      onChange={(e) => setMotivo(e.target.value)}
-                      autoFocus
-                    />
-                    <button onClick={() => confirmar(r.id)} disabled={enviando}>
-                      {enviando ? 'Cancelando…' : 'Confirmar'}
-                    </button>
-                    <button className="secundario" onClick={cerrar} disabled={enviando}>
-                      Volver
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => abrir(r.id)} disabled={noCancelable}>
-                    Cancelar
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                    {cancelandoId === r.id && (
+                      <tr className="fila-cancelar">
+                        <td colSpan={6}>
+                          <div className="cancelar">
+                            <input
+                              placeholder="Motivo de la cancelación"
+                              value={motivo}
+                              onChange={(e) => setMotivo(e.target.value)}
+                              autoFocus
+                            />
+                            <button onClick={() => confirmar(r.id)} disabled={enviando}>
+                              {enviando ? 'Cancelando…' : 'Confirmar'}
+                            </button>
+                            <button className="secundario" onClick={cerrar} disabled={enviando}>
+                              Volver
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -26,23 +26,27 @@ export default function App() {
 
   const recargar = () => setVersion((v) => v + 1);
 
-  return (
-    <main className="contenedor">
-      <h1>Reservas de viajes</h1>
+   return (
+    <>
+      <header className="barra">
+        <h1>Reservas de viajes</h1>
+      </header>
 
-      {USE_MOCK && (
-        <p className="aviso">Modo demo: los datos son simulados y se borran al recargar.</p>
-      )}
+      <main className="contenedor">
+        {USE_MOCK && (
+          <p className="aviso">Modo demo: los datos son simulados y se borran al recargar.</p>
+        )}
 
-      <FormReserva clienteId={CLIENTE_ID} onCreada={recargar} />
+        <FormReserva clienteId={CLIENTE_ID} onCreada={recargar} />
 
-      {cargando ? (
-        <p>Cargando reservas…</p>
-      ) : error ? (
-        <p className="mensaje error">{error}</p>
-      ) : (
-        <ListaReservas reservas={reservas} onCambio={recargar} />
-      )}
-    </main>
+        {cargando ? (
+          <p>Cargando reservas…</p>
+        ) : error ? (
+          <p className="mensaje error">{error}</p>
+        ) : (
+          <ListaReservas reservas={reservas} onCambio={recargar} />
+        )}
+      </main>
+    </>
   );
 }

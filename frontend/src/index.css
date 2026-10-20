@@ -145,3 +145,267 @@ button.secundario {
   color: inherit;
   border: 1px solid var(--borde);
 }
+
+.barra {
+  background: linear-gradient(90deg, #4f46e5, #06b6d4);
+  color: white;
+  padding: 20px 16px;
+  box-shadow: 0 2px 8px #0003;
+}
+
+.barra h1 {
+  max-width: 720px;
+  margin: 0 auto;
+  font-size: 26px;
+}
+
+/* ===== Estética ===== */
+:root {
+  --verde: #16a34a;
+  --rojo: #dc2626;
+}
+
+body {
+  background: light-dark(#f1f5f9, #0f172a);
+}
+
+.barra {
+  background: linear-gradient(90deg, #15803d, #22c55e);
+}
+
+.card {
+  background: light-dark(#ffffff, #1e293b);
+  border: none;
+  box-shadow: 0 4px 16px #0000001a;
+  padding: 24px;
+}
+
+.card h2 {
+  font-size: 20px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--verde);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--verde);
+  box-shadow: 0 0 0 3px #16a34a33;
+}
+
+form.card button[type='submit'] {
+  background: var(--verde);
+  font-weight: 600;
+  font-size: 16px;
+  padding: 12px;
+}
+
+button {
+  transition: transform 0.15s, filter 0.15s;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.lista li {
+  border: none;
+  border-left: 5px solid var(--borde);
+  background: light-dark(#f8fafc, #0f172a);
+  padding: 12px 14px;
+  transition: box-shadow 0.15s;
+}
+
+.lista li:hover {
+  box-shadow: 0 2px 8px #0000001a;
+}
+
+.lista li:has(.confirmada) { border-left-color: #2e9d4f; }
+.lista li:has(.pendiente)  { border-left-color: #f5a623; }
+.lista li:has(.cancelada)  { border-left-color: #d64545; opacity: 0.75; }
+.lista li:has(.activada)   { border-left-color: #646cff; }
+
+.lista li > button {
+  background: transparent;
+  color: var(--rojo);
+  border: 1px solid var(--rojo);
+}
+
+.lista li > button:disabled {
+  color: inherit;
+  border-color: var(--borde);
+}
+
+.cancelar button:not(.secundario) {
+  background: var(--rojo);
+}
+
+/* ===== Tabla de reservas ===== */
+.tabla-contenedor {
+  overflow-x: auto;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tabla th {
+  text-align: left;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  padding: 8px 10px;
+  border-bottom: 2px solid var(--borde);
+  white-space: nowrap;
+}
+
+.tabla td {
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--borde);
+  vertical-align: middle;
+}
+
+.tabla tbody tr:hover td {
+  background: light-dark(#f8fafc, #0f172a);
+}
+
+.tabla td:first-child {
+  border-left: 4px solid transparent;
+}
+
+.tabla tr.confirmada td:first-child { border-left-color: #2e9d4f; }
+.tabla tr.pendiente td:first-child  { border-left-color: #f5a623; }
+.tabla tr.cancelada td:first-child  { border-left-color: #d64545; }
+.tabla tr.activada td:first-child   { border-left-color: #646cff; }
+
+.tabla tr.cancelada td {
+  opacity: 0.7;
+}
+
+.tabla td:nth-child(2),
+.tabla td:nth-child(3),
+.tabla td:nth-child(4) {
+  white-space: nowrap;
+}
+
+.motivo {
+  display: block;
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.tabla .btn-cancelar {
+  background: transparent;
+  color: var(--rojo);
+  border: 1px solid var(--rojo);
+  padding: 6px 12px;
+}
+
+.tabla .btn-cancelar:disabled {
+  color: inherit;
+  border-color: var(--borde);
+}
+
+.fila-cancelar td {
+  background: light-dark(#fef2f2, #2a1215);
+}
+
+/* ===== Mapa ===== */
+.mapa-selector {
+  display: grid;
+  gap: 8px;
+}
+
+.buscador {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px;
+  border: 2px solid var(--borde);
+  border-radius: 10px;
+}
+
+.buscador.activo {
+  border-color: var(--verde, #16a34a);
+}
+
+.buscador input {
+  flex: 1;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 8px 0;
+}
+
+.sugerencias {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  background: light-dark(#ffffff, #1e293b);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  box-shadow: 0 6px 16px #0002;
+}
+
+.sugerencias li {
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sugerencias li:hover {
+  background: light-dark(#f1f5f9, #0f172a);
+}
+
+.mapa-ayuda {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.mapa-ayuda button {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
+.mapa {
+  height: 320px;
+  border-radius: 12px;
+  border: 1px solid var(--borde);
+}
+
+.punto {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.punto.origen {
+  background: #2563eb;
+}
+
+.punto.destino {
+  background: #dc2626;
+}
+
+.mapa-distancia {
+  margin: 0;
+  font-size: 15px;
+}
