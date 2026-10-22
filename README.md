@@ -173,3 +173,56 @@ Las pruebas requieren la configuración del entorno y de los servicios correspon
 ## Control de versiones
 
 El proyecto utiliza Git y GitHub para el control de versiones y el trabajo colaborativo. El código se encuentra en el repositorio del Grupo 9 de la organización FRRe-DS.
+
+## Organización del trabajo por bloques
+
+Para organizar el desarrollo del Módulo 9, el equipo se dividió en cuatro bloques de trabajo, distribuyendo las responsabilidades entre los integrantes.
+
+### Bloque 1 — Análisis y documentación inicial
+
+**Integrantes:**
+- Marco Maiocchi
+- Ramiro Escobar
+
+**Responsabilidades:**
+- Análisis de los requerimientos del módulo.
+- Definición de las funcionalidades de reservas anticipadas.
+- Documentación general del proyecto y decisiones técnicas.
+- Organización de los contratos e integraciones con otros módulos.
+
+### Bloque 2 — Backend y lógica de negocio
+
+**Integrantes:**
+- Valentina Maciel
+- Mariano Del Valle
+
+**Responsabilidades:**
+- Desarrollo de los servicios y endpoints de la API REST.
+- Implementación de las validaciones y reglas de negocio.
+- Gestión de los estados de las reservas.
+- Comunicación entre el backend y la base de datos.
+
+### Bloque 3 — Base de datos e integraciones
+
+**Integrantes:**
+- Irina Medera
+- Bianca Gómez Báez
+- Valentino Cabás
+- Oriana Aguilar
+
+**Responsabilidades:**
+- Diseño y configuración de la base de datos.
+- Persistencia de reservas e historial de cambios.
+- Desarrollo de las integraciones y simulaciones de otros módulos.
+- Pruebas de funcionamiento y manejo de errores.
+
+### Bloque 4 — Frontend e interfaz de usuario
+
+**Integrante:**
+- Lara Wolman
+
+**Responsabilidades:**
+- Desarrollo de la interfaz web con React.
+- Implementación del formulario de reservas.
+- Visualización y gestión de las reservas.
+- Conexión de la interfaz con los endpoints del backend.
