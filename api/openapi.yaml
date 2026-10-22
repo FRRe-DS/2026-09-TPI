@@ -1,0 +1,776 @@
+openapi: 3.0.3
+info:
+  title: M9 — Reservas de Viajes
+  version: 0.1.0
+  description: |
+    API del módulo M9 (Grupo 9) de la plataforma de movilidad urbana — TPI Desarrollo de Software 2026.
+
+    Permite crear reservas de viajes para una fecha y hora futura, consultarlas, modificarlas,
+    cancelarlas, activarlas (pidiendo una solicitud de despacho a M5) y ver su historial.
+
+    **Formato de error:** todas las respuestas de error usan `{ codigo, mensaje, detalle }` (RNF-03).
+    La única excepción es `GET /health`.
+
+    **Trazabilidad (RNF-14):** cada respuesta incluye el encabezado `X-Request-Id`. Si el pedido
+    trae uno, se reutiliza; si no, el servidor genera un UUID.
+
+    **Fechas:** `fechaHora` se envía y se devuelve en ISO 8601 con zona u offset (por ejemplo,
+    UTC con `Z`). `zonaHoraria` es un identificador IANA (por ejemplo, `America/Argentina/Buenos_Aires`).
+
+    **Integraciones:** M2 (cliente habilitado), M4 (cobertura y distancia), M7 (tarifa) y M5 (despacho)
+    están simulados por ahora dentro del backend.
+servers:
+  - url: https://m9-reservas.onrender.com
+    description: Backend publicado en Render
+  - url: http://localhost:3000
+    description: Local (npm run dev o docker compose)
+tags:
+  - name: Reservas
+    description: Crear, consultar, modificar y cancelar reservas (RF-9.1 a RF-9.7)
+  - name: Activación
+    description: Activación de la reserva y pedido de despacho a M5 (RF-9.9, RF-9.10)
+  - name: Historial
+    description: Historial no destructivo de cambios (RF-9.12)
+  - name: Salud
+    description: Estado del servicio (RNF-14)
+
+paths:
+  /health:
+    get:
+      tags: [Salud]
+      summary: Estado del servicio y de la conexión a la base
+      operationId: health
+      responses:
+        '200':
+          description: El servicio responde y la base está conectada
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          description: El servicio responde pero no llega a la base de datos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthError'
+
+  /reservas:
+    post:
+      tags: [Reservas]
+      summary: Crear una reserva (RF-9.1 a RF-9.5)
+      operationId: crearReserva
+      description: |
+        Valida los datos, la ventana de anticipación (RF-9.2), el cliente, la cobertura y estima la tarifa
+        (RF-9.3, RF-9.4). Guarda la reserva como `PENDIENTE` e intenta confirmarla automáticamente (RF-9.5).
+        Si la confirmación falla, responde 201 igual, con la reserva `PENDIENTE` y el `motivo`.
+
+        **Idempotencia (RNF-09):** `claveIdempotencia` es obligatoria. Si se repite con los mismos datos,
+        responde 200 con la reserva ya creada; si se repite con datos distintos, responde 409
+        `CONFLICTO_IDEMPOTENCIA`.
+
+        `origen` y `destino` aceptan un objeto con coordenadas (lo que manda el mapa del frontend) o un texto;
+        con texto se usa la geocodificación simulada (reconoce `UTN`, `Aeropuerto` y `Terminal de Ómnibus`).
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaReserva'
+            examples:
+              conCoordenadas:
+                summary: Desde el mapa del frontend
+                value:
+                  claveIdempotencia: 6f1c2b8e-3a4d-4c5e-9f60-7a8b9c0d1e2f
+                  clienteId: cliente_001
+                  origen:
+                    direccion: French 414, Resistencia, Chaco
+                    latitud: -27.4494
+                    longitud: -58.9835
+                  destino:
+                    direccion: Terminal de Ómnibus, Resistencia, Chaco
+                    latitud: -27.457
+                    longitud: -58.968
+                  tipoVehiculo: AUTO
+                  fechaHora: '2026-10-23T12:00:00.000Z'
+                  zonaHoraria: America/Argentina/Buenos_Aires
+              conTexto:
+                summary: Con direcciones en texto (geocodificación simulada)
+                value:
+                  claveIdempotencia: 0b9a8c7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d
+                  clienteId: cliente_001
+                  origen: UTN
+                  destino: Aeropuerto
+                  tipoVehiculo: MOTO
+                  fechaHora: '2026-10-24T15:30:00.000Z'
+                  zonaHoraria: America/Argentina/Buenos_Aires
+      responses:
+        '201':
+          description: Reserva creada (confirmada, o pendiente con el motivo)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaCreacion'
+        '200':
+          description: Reintento con la misma clave de idempotencia y los mismos datos; devuelve la reserva existente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaCreacion'
+        '400':
+          description: |
+            Datos mal enviados: `CLAVE_IDEMPOTENCIA_INVALIDA`, `DATOS_INCOMPLETOS`, `TIPO_VEHICULO_INVALIDO`,
+            `ZONA_HORARIA_INVALIDA`, `FECHA_INVALIDA`, `DATOS_INVALIDOS`, `COORDENADAS_NO_DISPONIBLES`,
+            `ORIGEN_DESTINO_IGUALES` o `JSON_INVALIDO`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: DATOS_INCOMPLETOS
+                mensaje: Faltan datos obligatorios o contienen valores inválidos
+                detalle: null
+        '409':
+          description: La clave de idempotencia ya se usó con datos diferentes (`CONFLICTO_IDEMPOTENCIA`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/ReglaIncumplida'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+    get:
+      tags: [Reservas]
+      summary: Listar las reservas de un cliente (RF-9.5)
+      operationId: listarReservas
+      parameters:
+        - name: clienteId
+          in: query
+          required: true
+          description: Identificador del cliente (hasta integrar M1 se usa, por ejemplo, `cliente_001`)
+          schema:
+            type: string
+            example: cliente_001
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: Reservas del cliente (lista vacía si no tiene)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Reserva'
+        '400':
+          description: Falta `clienteId` (`CLIENTE_ID_REQUERIDO`)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: CLIENTE_ID_REQUERIDO
+                mensaje: Debes indicar el identificador del cliente
+                detalle: null
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+  /reservas/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ReservaId'
+    get:
+      tags: [Reservas]
+      summary: Consultar una reserva (RF-9.5)
+      operationId: consultarReserva
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: La reserva
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '400':
+          $ref: '#/components/responses/IdInvalido'
+        '404':
+          $ref: '#/components/responses/NoEncontrada'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+    patch:
+      tags: [Reservas]
+      summary: Modificar o reprogramar una reserva (RF-9.6)
+      operationId: modificarReserva
+      description: |
+        Solo para reservas `PENDIENTE` o `CONFIRMADA` y hasta 60 minutos antes del viaje
+        (si no, 422 con `detalle.regla = LIMITE_MODIFICACION_SUPERADO`). Se manda solo lo que cambia.
+        Una nueva `fechaHora` vuelve a validar la ventana de anticipación; un cambio de origen, destino
+        o tipo de vehículo recalcula la tarifa. Cada campo cambiado queda en el historial.
+      parameters:
+        - $ref: '#/components/parameters/XActor'
+        - $ref: '#/components/parameters/XRol'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CambiosReserva'
+            example:
+              fechaHora: '2026-10-25T13:00:00.000Z'
+              tipoVehiculo: MOTO
+      responses:
+        '200':
+          description: La reserva modificada (o la misma, si no cambió nada)
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '400':
+          description: |
+            Datos mal enviados (`DATOS_INVALIDOS`, por ejemplo un campo que no se puede modificar),
+            `ID_INVALIDO`, `COORDENADAS_NO_DISPONIBLES` u `ORIGEN_DESTINO_IGUALES`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: DATOS_INVALIDOS
+                mensaje: Los datos enviados no son válidos
+                detalle:
+                  - 'Solo se puede modificar: origen, destino, tipoVehiculo, fechaHora, zonaHoraria'
+        '404':
+          $ref: '#/components/responses/NoEncontrada'
+        '409':
+          $ref: '#/components/responses/NoEditable'
+        '422':
+          $ref: '#/components/responses/ReglaIncumplida'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+  /reservas/{id}/cancelar:
+    parameters:
+      - $ref: '#/components/parameters/ReservaId'
+    post:
+      tags: [Reservas]
+      summary: Cancelar una reserva con motivo (RF-9.7)
+      operationId: cancelarReserva
+      description: Solo para reservas `PENDIENTE` o `CONFIRMADA`. El motivo queda en la reserva y en el historial.
+      parameters:
+        - $ref: '#/components/parameters/XActor'
+        - $ref: '#/components/parameters/XRol'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Cancelacion'
+      responses:
+        '200':
+          description: La reserva cancelada
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '400':
+          description: Falta el motivo o tiene menos de 3 caracteres (`DATOS_INVALIDOS`), o `ID_INVALIDO`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: DATOS_INVALIDOS
+                mensaje: Los datos enviados no son válidos
+                detalle:
+                  - motivo es obligatorio (mínimo 3 caracteres)
+        '404':
+          $ref: '#/components/responses/NoEncontrada'
+        '409':
+          $ref: '#/components/responses/NoEditable'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+  /reservas/{id}/activar:
+    parameters:
+      - $ref: '#/components/parameters/ReservaId'
+    post:
+      tags: [Activación]
+      summary: Activar una reserva confirmada y pedir el despacho a M5 (RF-9.9, RF-9.10)
+      operationId: activarReserva
+      description: |
+        Pasa la reserva de `CONFIRMADA` a `ACTIVADA` con un UPDATE condicional dentro de una transacción:
+        ante pedidos concurrentes o duplicados solo uno gana y M5 se llama una sola vez.
+        Los demás reciben 409 con el estado actual en `detalle.estado`.
+        Si M5 falla, se deshace todo, la reserva sigue `CONFIRMADA` y se puede reintentar (503).
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: Reserva activada, con `solicitudDespachoId` de M5
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reserva'
+        '400':
+          $ref: '#/components/responses/IdInvalido'
+        '404':
+          $ref: '#/components/responses/NoEncontrada'
+        '409':
+          description: La reserva no está `CONFIRMADA` (por ejemplo, ya fue activada)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: CONFLICTO
+                mensaje: La reserva está ACTIVADA y no se puede activar
+                detalle:
+                  estado: ACTIVADA
+        '503':
+          description: M5 no pudo crear la solicitud de despacho; la reserva sigue `CONFIRMADA`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                codigo: SERVICIO_NO_DISPONIBLE
+                mensaje: M5 no pudo crear la solicitud de despacho. La reserva sigue CONFIRMADA y se puede reintentar.
+                detalle: null
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+  /reservas/{id}/historial:
+    parameters:
+      - $ref: '#/components/parameters/ReservaId'
+    get:
+      tags: [Historial]
+      summary: Historial de cambios de una reserva (RF-9.12)
+      operationId: historialReserva
+      description: Entradas ordenadas por fecha. El historial solo se agrega; nunca se modifica ni se borra.
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: Entradas del historial
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntradaHistorial'
+        '400':
+          $ref: '#/components/responses/IdInvalido'
+        '404':
+          $ref: '#/components/responses/NoEncontrada'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
+components:
+  parameters:
+    ReservaId:
+      name: id
+      in: path
+      required: true
+      description: Identificador de la reserva (UUID)
+      schema:
+        type: string
+        format: uuid
+        example: 01a13760-a499-713c-a31b-f3e20258426d
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Identificador para seguir el pedido entre módulos. Si no se manda, lo genera el servidor.
+      schema:
+        type: string
+    XActor:
+      name: X-Actor
+      in: header
+      required: false
+      description: Quién hace el cambio; queda en el historial. Por defecto `cliente`. Provisorio hasta integrar M1.
+      schema:
+        type: string
+        default: cliente
+    XRol:
+      name: X-Rol
+      in: header
+      required: false
+      description: Rol de quien hace el cambio; queda en el historial. Provisorio hasta integrar M1.
+      schema:
+        type: string
+        enum: [CLIENTE, OPERADOR, SISTEMA]
+        default: CLIENTE
+
+  headers:
+    XRequestId:
+      description: Identificador del pedido (el recibido o uno generado)
+      schema:
+        type: string
+
+  responses:
+    IdInvalido:
+      description: El identificador no tiene formato UUID (`ID_INVALIDO`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: ID_INVALIDO
+            mensaje: El identificador no tiene un formato válido
+            detalle: null
+    NoEncontrada:
+      description: La reserva no existe (`NO_ENCONTRADA`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: NO_ENCONTRADA
+            mensaje: No existe la reserva 01a13760-a499-713c-a31b-f3e20258426d
+            detalle: null
+    NoEditable:
+      description: |
+        La reserva está `ACTIVADA`, `CANCELADA` o `VENCIDA`, o cambió de estado durante la operación (`CONFLICTO`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: CONFLICTO
+            mensaje: No se puede modificar ni cancelar una reserva CANCELADA
+            detalle: null
+    ReglaIncumplida:
+      description: |
+        No se cumple una regla de negocio (`REGLA_INCUMPLIDA`). `detalle.regla` indica cuál:
+        `FECHA_PASADA`, `ANTICIPACION_INSUFICIENTE` (menos de 60 minutos), `ANTICIPACION_EXCEDIDA`
+        (más de 30 días), `CLIENTE_NO_HABILITADO`, `FUERA_DE_COBERTURA` o `LIMITE_MODIFICACION_SUPERADO`.
+        Los límites se configuran con `ANTICIPACION_MINIMA_MINUTOS` y `ANTICIPACION_MAXIMA_DIAS`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: REGLA_INCUMPLIDA
+            mensaje: La reserva debe realizarse con al menos 60 minutos de anticipación
+            detalle:
+              regla: ANTICIPACION_INSUFICIENTE
+    ErrorInterno:
+      description: Error inesperado (`ERROR_INTERNO`); el detalle queda en el log del servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            codigo: ERROR_INTERNO
+            mensaje: Ocurrió un error inesperado
+            detalle: null
+
+  schemas:
+    TipoVehiculo:
+      type: string
+      enum: [AUTO, MOTO]
+
+    EstadoReserva:
+      type: string
+      description: |
+        PENDIENTE → CONFIRMADA → ACTIVADA. CANCELADA y VENCIDA son finales.
+        Transiciones válidas: PENDIENTE → CONFIRMADA, CANCELADA o VENCIDA; CONFIRMADA → ACTIVADA, CANCELADA o VENCIDA;
+        ACTIVADA → VENCIDA (sin conductor).
+        VENCIDA registra la caducidad o la imposibilidad de servicio (RF-9.11).
+      enum: [PENDIENTE, CONFIRMADA, CANCELADA, ACTIVADA, VENCIDA]
+
+    Direccion:
+      type: object
+      description: Origen o destino de la reserva. Se guarda en la base como JSONB.
+      required: [direccion, latitud, longitud]
+      properties:
+        direccion:
+          type: string
+          minLength: 1
+          example: French 414, Resistencia, Chaco
+        latitud:
+          type: number
+          minimum: -90
+          maximum: 90
+          example: -27.4494
+        longitud:
+          type: number
+          minimum: -180
+          maximum: 180
+          example: -58.9835
+        alias:
+          type: string
+          nullable: true
+          example: Mi casa
+        piso:
+          type: string
+          nullable: true
+          example: 3B
+        indicaciones:
+          type: string
+          nullable: true
+          example: Tocar timbre
+
+    UbicacionEntrada:
+      description: Un objeto con coordenadas o una dirección en texto (geocodificación simulada)
+      oneOf:
+        - $ref: '#/components/schemas/Direccion'
+        - type: string
+          minLength: 1
+          example: UTN
+
+    NuevaReserva:
+      type: object
+      required: [claveIdempotencia, clienteId, origen, destino, tipoVehiculo, fechaHora, zonaHoraria]
+      properties:
+        claveIdempotencia:
+          type: string
+          format: uuid
+          description: UUID que identifica este pedido de creación. Se usa para no crear dos veces la misma reserva.
+        clienteId:
+          type: string
+          example: cliente_001
+        origen:
+          $ref: '#/components/schemas/UbicacionEntrada'
+        destino:
+          $ref: '#/components/schemas/UbicacionEntrada'
+        tipoVehiculo:
+          $ref: '#/components/schemas/TipoVehiculo'
+        fechaHora:
+          type: string
+          format: date-time
+          description: Fecha y hora del viaje (de 60 minutos a 30 días en el futuro)
+          example: '2026-10-23T12:00:00.000Z'
+        zonaHoraria:
+          type: string
+          description: Zona horaria IANA del cliente
+          example: America/Argentina/Buenos_Aires
+
+    CambiosReserva:
+      type: object
+      description: Solo los campos que cambian; al menos uno.
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        origen:
+          $ref: '#/components/schemas/UbicacionEntrada'
+        destino:
+          $ref: '#/components/schemas/UbicacionEntrada'
+        tipoVehiculo:
+          $ref: '#/components/schemas/TipoVehiculo'
+        fechaHora:
+          type: string
+          format: date-time
+          description: Debe incluir zona u offset (por ejemplo `Z` o `-03:00`)
+        zonaHoraria:
+          type: string
+
+    Cancelacion:
+      type: object
+      required: [motivo]
+      properties:
+        motivo:
+          type: string
+          minLength: 3
+          example: Cambio de planes
+
+    Condiciones:
+      type: object
+      description: Condiciones de confirmación, modificación, cancelación y tarifa que se muestran al cliente (RF-9.4)
+      properties:
+        confirmacion:
+          type: string
+        modificacion:
+          type: string
+        cancelacion:
+          type: string
+        activacion:
+          type: string
+        tarifa:
+          type: string
+
+    Reserva:
+      type: object
+      required:
+        - id
+        - clienteId
+        - origen
+        - destino
+        - tipoVehiculo
+        - fechaHora
+        - zonaHoraria
+        - estado
+        - tarifaEstimada
+        - motivoCancelacion
+        - solicitudDespachoId
+        - creadaEn
+        - modificadaEn
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 01a13760-a499-713c-a31b-f3e20258426d
+        clienteId:
+          type: string
+          example: cliente_001
+        origen:
+          $ref: '#/components/schemas/Direccion'
+        destino:
+          $ref: '#/components/schemas/Direccion'
+        tipoVehiculo:
+          $ref: '#/components/schemas/TipoVehiculo'
+        fechaHora:
+          type: string
+          format: date-time
+          example: '2026-10-23T12:00:00.000Z'
+        zonaHoraria:
+          type: string
+          example: America/Argentina/Buenos_Aires
+        estado:
+          $ref: '#/components/schemas/EstadoReserva'
+        tarifaEstimada:
+          type: number
+          nullable: true
+          description: Estimación en pesos (simulación de M7)
+          example: 1925.75
+        motivoCancelacion:
+          type: string
+          nullable: true
+        solicitudDespachoId:
+          type: string
+          nullable: true
+          description: Se completa cuando M5 crea la solicitud de despacho
+        claveIdempotencia:
+          type: string
+          format: uuid
+          nullable: true
+        creadaEn:
+          type: string
+          format: date-time
+        modificadaEn:
+          type: string
+          format: date-time
+
+    RespuestaCreacion:
+      type: object
+      required: [mensaje, reserva, condiciones]
+      properties:
+        mensaje:
+          type: string
+          example: Reserva creada y confirmada correctamente
+        motivo:
+          type: string
+          description: Solo si la reserva quedó PENDIENTE; explica por qué no se confirmó
+        reserva:
+          $ref: '#/components/schemas/Reserva'
+        condiciones:
+          $ref: '#/components/schemas/Condiciones'
+
+    EntradaHistorial:
+      type: object
+      required: [id, reservaId, tipoCambio, rolActor, fechaCambio]
+      properties:
+        id:
+          type: string
+          format: uuid
+        reservaId:
+          type: string
+          format: uuid
+        tipoCambio:
+          type: string
+          enum: [CREACION, CONFIRMACION, MODIFICACION, CANCELACION, ACTIVACION, VENCIMIENTO]
+        campoModificado:
+          type: string
+          nullable: true
+          example: estado
+        valorAnterior:
+          type: string
+          nullable: true
+          example: CONFIRMADA
+        valorNuevo:
+          type: string
+          nullable: true
+          example: CANCELADA
+        actorId:
+          type: string
+          nullable: true
+          example: cliente
+        rolActor:
+          type: string
+          enum: [CLIENTE, OPERADOR, SISTEMA]
+        motivo:
+          type: string
+          nullable: true
+        fechaCambio:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      description: Formato común de error (RNF-03)
+      required: [codigo, mensaje, detalle]
+      properties:
+        codigo:
+          type: string
+          example: NO_ENCONTRADA
+        mensaje:
+          type: string
+          description: Texto para mostrar al usuario
+        detalle:
+          nullable: true
+          description: Información extra; puede ser una lista de textos, un objeto (por ejemplo `{ regla }` o `{ estado }`) o null
+
+    Health:
+      type: object
+      properties:
+        estado:
+          type: string
+          example: OK
+        servicio:
+          type: string
+          example: M9 Reservas
+        baseDeDatos:
+          type: string
+          example: conectada
+        fecha:
+          type: string
+          format: date-time
+
+    HealthError:
+      type: object
+      properties:
+        estado:
+          type: string
+          example: ERROR
+        servicio:
+          type: string
+          example: M9 Reservas
+        baseDeDatos:
+          type: string
+          example: sin conexión
