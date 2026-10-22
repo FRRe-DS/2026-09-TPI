@@ -1,0 +1,50 @@
+# Decisión y Justificación de Tecnologías Utilizadas
+
+**Trabajo Práctico Integrador — Desarrollo de Software 2026**  
+**Grupo 9 — Módulo 9: Reservas de Viajes**
+
+## Punto de partida del equipo y criterio de elección (RNF-01)
+
+Al comenzar el TPI, nos encontramos con el desafío de construir un servicio distribuido arrancando casi desde cero en las herramientas de desarrollo. Ninguno de los nueve integrantes había trabajado previamente con Node.js, Express ni TypeScript, y únicamente un miembro del grupo había tenido un contacto inicial con Supabase.
+
+Frente a este escenario, la decisión tecnológica para cumplir con el requerimiento de libertad tecnológica (**RNF-01**) se basó en buscar un equilibrio entre la complejidad demandada y la curva de aprendizaje del grupo. Priorizamos herramientas que tuvieran mucha documentación en español e inglés, una configuración inicial simple para no complicarnos al inicio y mecanismos que nos ayudarán a evitar errores comunes al trabajar en equipo entre nueve personas. Sumado a esto, al tener mucha documentación al respecto podemos trabajar de mejor forma con herramientas de inteligencia artificial.
+
+## Backend: Node.js, Express y TypeScript
+
+Para construir la lógica del servicio y exponer la API REST del Módulo 9 elegimos *Node.js* como entorno de ejecución junto con el framework *Express*. Al estar aprendiendo desde cero cómo funciona un servidor web por dentro, Express era mucho más claro y directo que otros frameworks más pesados. Sin muchas complicaciones pudimos levantar el servidor, separar las rutas HTTP (`GET`, `POST`, `PATCH`), leer el cuerpo de las peticiones en formato JSON y agregar middlewares propios para el manejo consistente de errores y la trazabilidad mediante el encabezado `X-Request-Id` (**RNF-14**).
+
+Sobre esa base tomamos la decisión de programar todo el backend en *TypeScript*. Como antes mencionamos no teníamos experiencia previa en el lenguaje y el bloque de backend estaba dividido entre varios integrantes trabajando en distintas ramas de Git, necesitábamos una herramienta que nos avisara cuando estábamos conectando mal una capa con otra. TypeScript nos permitió definir en un solo lugar la forma exacta de una reserva, sus direcciones, sus estados válidos y su historial (`backend/src/models/reserva.ts`). De esa manera, el propio editor VS Code nos marcaba en el momento algunos errores, ahorrándonos búsqueda de errores al juntar el código de cada compañero, facilitando también el cumplimiento estricto de los contratos OpenAPI acordados con los demás módulos (**RNF-03**).
+
+Para la comunicación entre el backend y la base de datos optamos por utilizar directamente el paquete *`pg` (`node-postgres`)* en lugar de incorporar un ORM intermedio. Aprender un ORM desde cero implicaba sumar otra complicación para el grupo; en cambio, usar `pg` nos permitió escribir consultas SQL estándar dentro de nuestros archivos de repositorio (`backend/src/repositories/`), aprovechando los conocimientos de bases de datos que ya traíamos y manteniendo el control total sobre cuándo se abre, se confirma (`COMMIT`) o se revierte (`ROLLBACK`) una transacción.
+
+## Base de datos: PostgreSQL sobre Supabase
+
+Para asegurar la persistencia propia del módulo (**RNF-05**) elegimos *PostgreSQL* alojado en la plataforma *Supabase*. Aunque al inicio solo uno de los integrantes conocía superficialmente Supabase, adoptarlo nos simplificó la organización del grupo. En lugar de que cada uno tuviera que instalar y configurar un servidor PostgreSQL local, Supabase tiene una instancia compartida en la nube lista para usar. Su interfaz web nos sirvió de apoyo mientras diseñábamos el sistema (`db/schema.sql`), probábamos las restricciones y cargábamos el lote de reservas de prueba (`db/seed.sql`).
+
+PostgreSQL nos ayuda a resolver algunos de los requerimientos más delicados de las reservas programadas. El punto más crítico del módulo es impedir que una misma reserva se active dos veces y genere solicitudes de viaje duplicadas hacia el Módulo 5 ante peticiones simultáneas (**RF-9.10** y **RNF-08**). Gracias al manejo transaccional de PostgreSQL, resolvimos este problema combinando una actualización atómica condicionada por el estado actual (`UPDATE reserva SET estado = 'A' WHERE id = $1 AND estado = 'C'`) con la restricción de unicidad en `solicitud_despacho_id` y un mecanismo de rollback si la comunicación con M5 falla. Por su parte, la `clave_idempotencia` se encarga de evitar reservas duplicadas al momento de su creación. Así, el propio motor de base de datos garantiza que solo el primer proceso logre activar la reserva y que cualquier intento repetido o concurrente sea rechazado de forma segura.
+
+Otras herramientas que utilizamos:
+- El tipo *`JSONB`* nos permitió guardar la estructura completa del origen y del destino (dirección en texto, latitud, longitud, piso, alias e indicaciones) dentro de la tabla `reserva`, aplicando validaciones `CHECK` para asegurar que las coordenadas estén siempre dentro de rangos geográficos válidos.
+- Implementamos funciones en PL/pgSQL para generar identificadores `UUIDv7` ordenables temporalmente y *triggers* que bloquean transiciones de estado inválidas directamente en la base. Como Supabase funciona sobre PostgreSQL puro, el backend se conecta mediante una variable de entorno estándar (`DATABASE_URL`, cumpliendo con **RNF-06**), lo que nos permite cambiar de entorno sin modificar el código del servicio.
+
+## Pruebas automatizadas y contenedorización: Vitest, Supertest y Docker
+
+Para validar el funcionamiento del módulo (**RNF-07**) elegimos *Vitest* junto con *Supertest*. Nos inclinamos por Vitest porque funciona bien con proyectos en TypeScript (sin requerir configuraciones complejas de compilación previa), algo que nos es de gran ayuda siendo que nuestro conocimiento es bajo en este ámbito. Combinado con Supertest, pudimos escribir pruebas que levantan la aplicación Express y disparan peticiones HTTP reales para verificar las reglas de anticipación mínima y máxima (**RF-9.2**), la idempotencia en la creación, el registro del historial (**RF-9.12**) y la prueba de concurrencia que lanza diez intentos de activación al mismo tiempo con `Promise.all` (**RNF-08**).
+
+Un problema práctico que surgió al armar las pruebas de integración fue cómo testear contra una base de datos real sin borrar ni ensuciar las reservas que el resto del grupo estaba usando en Supabase. Para solucionarlo y cumplir al mismo tiempo con la ejecución en contenedores reproducibles (**RNF-04**), utilizamos **Docker y Docker Compose**. Además del contenedor principal de la API (construido con un `Dockerfile` en dos etapas para generar una imagen liviana de producción), definimos en `docker-compose.yml` un segundo servicio llamado `db-test` basado en la imagen oficial `postgres:16-alpine`. Este contenedor levanta una base de datos local temporal exclusivamente para los tests, carga automáticamente el archivo `db/schema.sql` al iniciar y permite que cualquier integrante ejecute `npm test` de forma aislada y repetible.
+
+Para que el frontend pudiera conectarse sin que cada integrante tuviera que levantar el backend en su computadora local, publicamos el servicio en *Render* (plan gratuito). Implementamos un flujo de automatización con GitHub Actions (`.github/workflows/deploy-render.yml`) que, ante cada cambio aprobado en la rama principal, notifica a Render para desplegar automáticamente la nueva versión. El enlace de publicación se administra de forma segura como secreto de GitHub, mientras que la conexión a la base de datos se maneja como variable de entorno dentro de la plataforma, manteniéndola fuera del repositorio (**RNF-06**).
+
+Complementariamente, sumamos los paquetes *`swagger-ui-express`* y *`yaml`* para publicar el contrato OpenAPI del módulo en la ruta `/docs`. Esto nos resultó muy útil durante el aprendizaje porque nos dio una página interactiva en el navegador desde donde probar cada endpoint sin depender únicamente de la terminal o de tener listo el frontend.
+
+## Frontend: React con Vite, TypeScript y Leaflet
+
+Si bien contar con una interfaz de usuario recién es obligatorio para la tercera entrega (**RNF-15**), decidimos desarrollar una primera versión funcional del cliente web utilizando *React* empaquetado con *Vite* y escrito en *TypeScript*. Elegimos estas herramientas principalmente para mantener el mismo lenguaje tipado en todo el repositorio.
+
+Por su parte, Vite nos permitió crear la estructura del proyecto en poco tiempo y trabajar con recarga instantánea en el navegador sin tener que lidiar con herramientas de empaquetado complejas. De esta forma, logramos integrar una pantalla limpia y directa que se conecta al backend mediante variables de entorno (`VITE_API_URL`) y cuenta además con un modo simulado opcional (`VITE_USE_MOCK`), facilitando las demostraciones del módulo en clase.
+
+Para la selección de ubicaciones en el formulario de reserva incorporamos un mapa interactivo con *`leaflet`* y *`react-leaflet`* (`frontend/src/components/MapaSelector.tsx`) apoyado en servicios gratuitos basados en *OpenStreetMap*: *Photon* para buscar direcciones en Resistencia a partir de texto, *Nominatim* para obtener el nombre de la calle al hacer clic en un punto del mapa y *OSRM* para trazar el recorrido por calles y estimar la distancia (con cálculo en línea recta mediante la fórmula de Haversine como respaldo si no hay conexión). Optamos por estas alternativas abiertas porque no requieren clave de API paga ni tarjeta de crédito, lo que permitió que todo el grupo pudiera probar el mapa sin configuraciones extras.
+
+## Conclusión
+
+Como resumen, la mayoría de nuestras decisiones fueron guiadas por recomendaciones de estudiantes que ya cursaron la materia, simplicidad para adaptarse (al haber muchos conceptos nuevos, intentamos que la curva de aprendizaje fuera lo más baja posible) y disponibilidad de documentación, tanto para saber resolver problemas por nuestra cuenta como para recibir respuestas más claras y completas al apoyarnos en herramientas de inteligencia artificial.
