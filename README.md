@@ -16,7 +16,7 @@ El sistema cuenta con una API REST, una base de datos propia y mecanismos de int
 - Marco Maiocchi
 - Ramiro Escobar
 - Valentina Maciel
-- Mariano Del Valle
+- Mariano Del Valle González
 - Irina Medera
 - Bianca Gómez Báez
 - Valentino Cabás
