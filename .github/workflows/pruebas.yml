@@ -1,0 +1,43 @@
+name: Pruebas
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    services:
+      db-test:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: m9_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5433/m9_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Cargar el esquema de la base de pruebas
+        run: psql "$TEST_DATABASE_URL" -f db/schema.sql
+      - name: Instalar dependencias
+        run: npm ci
+        working-directory: backend
+      - name: Compilar
+        run: npm run build
+        working-directory: backend
+      - name: Pruebas con cobertura (mínimo 90 % de líneas)
+        run: npm run test:cov
+        working-directory: backend
