@@ -28,9 +28,9 @@
 - **Repositorio / Issue / PR:**
   - Rama: `devops/ci-sast`
   - Archivo agregado: `.github/workflows/ci-sast.yml`
-  - PR / Issue: *[Pegar aquí el enlace al Issue/PR una vez publicado en GitHub]*
+  - PR / Issue: https://github.com/FRRe-DS/2026-09-TPI/pull/5
 - **Evidencia (URL, captura o reporte):**
-  - *[Pegar aquí el enlace a la ejecución en GitHub Actions y al artifact `semgrep-sast-report` tras el push]*
+  - **
 - **Resultado:** Pipeline complementario de SAST y validación de frontend configurado y listo para su ejecución en GitHub Actions mediante Pull Request.
 - **Dificultad o bloqueo:** El repositorio ya contaba con pruebas de backend en `pruebas.yml`, pero no validaba el build/lint del frontend ni poseía escaneo SAST; se incorporaron en un workflow separado para evitar conflictos con el flujo actual del equipo de Desarrollo.
 - **Siguiente acción:**
