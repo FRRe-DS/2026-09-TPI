@@ -1,0 +1,89 @@
+name: CI DevOps - SAST & Frontend Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'devops/**']
+
+permissions:
+  contents: read
+
+jobs:
+  frontend-build-lint:
+    name: Frontend Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Build frontend
+        run: npm run build
+
+  sast:
+    name: SAST Security Scan (Semgrep)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Semgrep
+        run: pip install --no-cache-dir semgrep
+
+      - name: Run Semgrep scan (report)
+        run: |
+          semgrep scan \
+            --config p/typescript \
+            --config p/nodejs \
+            --config p/react \
+            --config p/secrets \
+            --json -o semgrep-report.json \
+            .
+          semgrep scan \
+            --config p/typescript \
+            --config p/nodejs \
+            --config p/react \
+            --config p/secrets \
+            .
+
+      - name: Upload Semgrep report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sast-report
+          path: semgrep-report.json
+          if-no-files-found: ignore
+
+      - name: Quality Gate - Fail on HIGH/ERROR findings
+        run: |
+          semgrep scan \
+            --config p/typescript \
+            --config p/nodejs \
+            --config p/react \
+            --config p/secrets \
+            --severity ERROR \
+            --error \
+            .
