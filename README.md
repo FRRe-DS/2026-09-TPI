@@ -290,3 +290,8 @@ curl http://localhost:3000/notificaciones-pendientes
 | 4 | Falla de Notificaciones | Con B levantada: `docker compose -f docker-compose.b.yml stop notificaciones`, crear una reserva y ver las pendientes | La reserva igual da 201. Pendientes: una notificación con `"estado":"PENDIENTE"` y el error (`Timeout…` o `No se pudo contactar a Notificaciones…`) |
 
 En el escenario 4, al detener Notificaciones el log muestra `npm error signal SIGTERM` y `exited with code 1`: es la señal de apagado que envía Docker, no una falla del servicio.
+
+## Documentación
+
+- [Informe del grupo](docs/Informe_Grupo9.pdf): investigación sobre Monolito modular vs Microservicios y Clean Architecture, la implementación práctica, la relación con el TPI y los criterios de utilización.
+
