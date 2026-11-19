@@ -1,0 +1,26 @@
+# Versión B: Notificaciones como servicio separado.
+# Dos contenedores con la MISMA imagen; Reservas le habla a Notificaciones por HTTP.
+services:
+  notificaciones:
+    build: .
+    image: grupo9-clean
+    command: ["npm", "run", "start:notificaciones"]
+    ports:
+      - "3001:3001"
+    environment:
+      PUERTO: "3001"
+
+  reservas:
+    build: .
+    image: grupo9-clean
+    ports:
+      - "3000:3000"
+    environment:
+      PUERTO: "3000"
+      MODO_NOTIFICACIONES: http
+      # "notificaciones" es el nombre del servicio de arriba: dentro de la red
+      # del compose, Docker lo resuelve como si fuera el nombre de una máquina.
+      NOTIFICACIONES_URL: http://notificaciones:3001
+      NOTIFICACIONES_TIMEOUT_MS: "2000"
+    depends_on:
+      - notificaciones

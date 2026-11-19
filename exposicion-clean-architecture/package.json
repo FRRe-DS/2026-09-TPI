@@ -1,0 +1,26 @@
+{
+  "name": "reservas-clean",
+  "version": "0.1.0",
+  "description": "Ejercicio de exposición - Grupo 9: Reservas y Notificaciones con Clean Architecture (versiones A y B)",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start:reservas": "tsx src/main/server.ts",
+    "start:notificaciones": "tsx src/notificaciones/server.ts",
+    "test": "tsx --test \"test/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}
