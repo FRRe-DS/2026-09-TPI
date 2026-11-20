@@ -88,3 +88,33 @@
 - **Dificultad o bloqueo:** Ninguna en la ejecución local; queda pendiente la ejecución en entorno cloud incluyendo el escenario de 1000 VUs (sin apuntar a la instancia gratuita de Supabase).
 - **Siguiente acción:**
   1. Cerrar acuerdo de métricas con Desarrollo, instrumentar OpenTelemetry y ejecutar los 4 escenarios (50, 100, 500, 1000 VUs) en cloud.
+
+---
+
+### Entrada 4 — 20/11/2026 (Hito 2: Instrumentación OpenTelemetry y Dashboard en Grafana)
+
+- **Fecha:** 20/11/2026
+- **Responsable/s:** Equipo DevOps (Grupo 03)
+- **Módulo:** M9 — Reservas de Viajes
+- **Objetivo:** Instrumentar el backend con OpenTelemetry (trazas y las 3 métricas propias de M9), configurar la exportación OTLP hacia Grafana y dejar el dashboard versionado para monitoreo local y en cloud.
+- **Tarea ejecutada:**
+  1. **SDK OpenTelemetry y auto-instrumentación:** Se agregaron `backend/src/telemetry/sdk.ts` y `backend/src/telemetry/metrics.ts`, inicializando `@opentelemetry/sdk-node` al arranque (`backend/src/index.ts`) con exportación OTLP/HTTP, auto-instrumentación para Express, PostgreSQL (`pg`) y HTTP, y correlación de `X-Request-Id` en `backend/src/middlewares/requestId.ts` (`http.request_id`).
+  2. **Tres métricas de negocio de M9:** Se instrumentaron en `crearReserva.service.ts`, `activarReserva.service.ts` y `modificarCancelar.service.ts`:
+     - `reservas_creadas_total` (`creada` / `pendiente`, por `tipoVehiculo`).
+     - `reservas_activaciones_total` y `reservas_activacion_duracion_ms`.
+     - `reservas_cancelaciones_total` y `reservas_modificaciones_total`.
+  3. **Stack local y Dashboard:** Se agregaron `docker-compose.otel.yml` (`grafana/otel-lgtm` + PostgreSQL + backend) y `observability/m9-dashboard.json`, y se validó la compilación TypeScript (`npm run build` exitoso).
+- **Decisiones / acuerdos con Desarrollo:**
+  - Desactivar OpenTelemetry automáticamente durante Vitest (`NODE_ENV === 'test'` o `VITEST`) para no interferir con la suite de pruebas existente.
+  - Usar variables estándar OTLP (`OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS`) para apuntar fácilmente a Grafana Cloud en el despliegue.
+- **Repositorio / Issue / PR:**
+  - Rama: `devops/opentelemetry`
+  - Archivos agregados/modificados: `backend/src/telemetry/sdk.ts`, `backend/src/telemetry/metrics.ts`, `backend/src/index.ts`, `backend/src/middlewares/requestId.ts`, `backend/src/services/crearReserva.service.ts`, `backend/src/services/activarReserva.service.ts`, `backend/src/services/modificarCancelar.service.ts`, `docker-compose.otel.yml`, `observability/m9-dashboard.json`, `backend/package.json`, `backend/package-lock.json`.
+  - PR / Issue: *[Pendiente: abrir PR hacia `main` y completar enlace]*
+- **Evidencia (URL, captura o reporte):**
+  - Compilación TypeScript (`npm run build`) en verde y dashboard versionado en `observability/m9-dashboard.json`.
+- **Resultado:** Backend instrumentado con OpenTelemetry y dashboard listo para operar tanto en local (`docker-compose.otel.yml`) como en Grafana Cloud.
+- **Dificultad o bloqueo:** Ninguna en la compilación; queda pendiente el despliegue en entorno cloud conectado a Grafana Cloud y las corridas finales de k6 (50, 100, 500 y 1000 VUs).
+- **Siguiente acción:**
+  1. Abrir el PR de `devops/opentelemetry` hacia `main` y validarlo con Desarrollo.
+  2. Desplegar el servicio en entorno cloud conectado a Grafana Cloud y ejecutar la batería final de k6 (50, 100, 500 y 1000 VUs).

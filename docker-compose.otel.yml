@@ -1,0 +1,43 @@
+services:
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    ports:
+      - "3005:3000"   # Grafana UI: http://localhost:3005 (admin / admin)
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+
+  db-otel:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: m9_test
+    volumes:
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d m9_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api-otel:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://postgres:postgres@db-otel:5432/m9_test
+      DB_SSL: "false"
+      ANTICIPACION_MINIMA_MINUTOS: 60
+      ANTICIPACION_MAXIMA_DIAS: 30
+      CORS_ORIGIN: "*"
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: m9-reservas-grupo-09
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-lgtm:4318
+    ports:
+      - "3000:3000"
+    depends_on:
+      otel-lgtm:
+        condition: service_started
+      db-otel:
+        condition: service_healthy
