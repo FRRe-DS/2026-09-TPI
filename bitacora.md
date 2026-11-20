@@ -54,9 +54,8 @@
   - Enviar el documento de métricas al equipo de Desarrollo para su validación antes de instrumentar OpenTelemetry.
   - Aprovechar los stubs internos del backend (`backend/src/stubs/`) para aislar el rendimiento de M9 sin depender de módulos externos en esta etapa.
 - **Repositorio / Issue / PR:**
-  - Rama: `devops/k6-local`
+  - Rama: `devops/k6-local` (mergeada en `main`)
   - Archivos agregados: `k6/reservas-load.js`, `docker-compose.k6.yml`
-  - PR / Issue: *[Pendiente: abrir PR hacia `main` y completar enlace]*
 - **Evidencia (URL, captura o reporte):**
   - Salida local de Grafana k6 (10 VUs, 15s): `1210/1210` checks OK, `0.00%` `http_req_failed`, `62.27 req/s`, `avg=32.08ms`, `p95=110.27ms`.
 - **Resultado:** Entorno local de k6 en Docker operativo y verificado al 100% sobre la API de M9.
@@ -108,13 +107,11 @@
   - Desactivar OpenTelemetry automáticamente durante Vitest (`NODE_ENV === 'test'` o `VITEST`) para no interferir con la suite de pruebas existente.
   - Usar variables estándar OTLP (`OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS`) para apuntar fácilmente a Grafana Cloud en el despliegue.
 - **Repositorio / Issue / PR:**
-  - Rama: `devops/opentelemetry`
+  - Rama: `devops/opentelemetry` (mergeada en `main`)
   - Archivos agregados/modificados: `backend/src/telemetry/sdk.ts`, `backend/src/telemetry/metrics.ts`, `backend/src/index.ts`, `backend/src/middlewares/requestId.ts`, `backend/src/services/crearReserva.service.ts`, `backend/src/services/activarReserva.service.ts`, `backend/src/services/modificarCancelar.service.ts`, `docker-compose.otel.yml`, `observability/m9-dashboard.json`, `backend/package.json`, `backend/package-lock.json`.
-  - PR / Issue: *[Pendiente: abrir PR hacia `main` y completar enlace]*
 - **Evidencia (URL, captura o reporte):**
   - Compilación TypeScript (`npm run build`) en verde y dashboard versionado en `observability/m9-dashboard.json`.
-- **Resultado:** Backend instrumentado con OpenTelemetry y dashboard listo para operar tanto en local (`docker-compose.otel.yml`) como en Grafana Cloud.
+- **Resultado:** Backend instrumentado con OpenTelemetry, mergeado en `main` y listo para operar tanto en local (`docker-compose.otel.yml`) como en Grafana Cloud.
 - **Dificultad o bloqueo:** Ninguna en la compilación; queda pendiente el despliegue en entorno cloud conectado a Grafana Cloud y las corridas finales de k6 (50, 100, 500 y 1000 VUs).
 - **Siguiente acción:**
-  1. Abrir el PR de `devops/opentelemetry` hacia `main` y validarlo con Desarrollo.
-  2. Desplegar el servicio en entorno cloud conectado a Grafana Cloud y ejecutar la batería final de k6 (50, 100, 500 y 1000 VUs).
+  1. Desplegar el servicio en entorno cloud conectado a Grafana Cloud y ejecutar la batería final de k6 (50, 100, 500 y 1000 VUs).
