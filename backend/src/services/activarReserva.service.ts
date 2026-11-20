@@ -8,6 +8,10 @@ import {
   tomarReservaParaActivar,
 } from '../repositories/reserva.repository';
 import { crearSolicitudDespacho } from '../stubs/m5Despacho.stub';
+import {
+  reservasActivacionDuracionHistogram,
+  reservasActivacionesCounter,
+} from '../telemetry/metrics';
 
 // Activa una reserva CONFIRMADA y le pide a M5 UNA sola solicitud de despacho.
 export async function activarReserva(id: string): Promise<Reserva> {
@@ -25,10 +29,15 @@ export async function activarReserva(id: string): Promise<Reserva> {
     }
 
     // 2. Solo el ganador llega hasta acá: llama a M5 una vez.
+    const inicioActivacion = Date.now();
     let solicitudId: string;
     try {
       ({ solicitudId } = await crearSolicitudDespacho(activada));
+      reservasActivacionesCounter.add(1, { resultado: 'confirmada' });
+      reservasActivacionDuracionHistogram.record(Date.now() - inicioActivacion, { resultado: 'confirmada' });
     } catch {
+      reservasActivacionesCounter.add(1, { resultado: 'error' });
+      reservasActivacionDuracionHistogram.record(Date.now() - inicioActivacion, { resultado: 'error' });
       // Al fallar, la transacción se deshace y la reserva vuelve a CONFIRMADA.
       throw errores.servicioNoDisponible(
         'M5 no pudo crear la solicitud de despacho. La reserva sigue CONFIRMADA y se puede reintentar.',

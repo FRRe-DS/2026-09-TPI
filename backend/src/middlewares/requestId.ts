@@ -3,11 +3,18 @@
 // Lo devolvemos en la respuesta para poder seguir el pedido entre módulos.
 import { randomUUID } from 'crypto';
 import { NextFunction, Request, Response } from 'express';
+import { trace } from '@opentelemetry/api';
 
 export function requestId(req: Request, res: Response, next: NextFunction) {
   const recibido = req.get('X-Request-Id');
   const id = recibido && recibido.trim() !== '' ? recibido : randomUUID();
   res.locals.requestId = id;
   res.setHeader('X-Request-Id', id);
+
+  const activeSpan = trace.getActiveSpan();
+  if (activeSpan) {
+    activeSpan.setAttribute('http.request_id', id);
+  }
+
   next();
 }

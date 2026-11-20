@@ -6,6 +6,10 @@ import { CambiosReserva, Reserva } from '../models/reserva';
 import { listarHistorial, registrarHistorial } from '../repositories/historial.repository';
 import { actualizarDatosReserva, buscarReservaPorId, cancelarReservaEnBase } from '../repositories/reserva.repository';
 import {
+  reservasCancelacionesCounter,
+  reservasModificacionesCounter,
+} from '../telemetry/metrics';
+import {
   resolverUbicacion,
   validarCambios,
   validarOrigenDestinoDistintos,
@@ -68,6 +72,7 @@ export async function modificarReserva(id: string, cuerpo: unknown, actorId: str
         actorId, rolActor,
       });
     }
+    reservasModificacionesCounter.add(1, { tipoVehiculo: actualizada.tipoVehiculo });
     return actualizada;
   });
 }
@@ -86,6 +91,7 @@ export async function cancelarReserva(id: string, cuerpo: unknown, actorId: stri
       reservaId: id, tipoCambio: 'CANCELACION', campoModificado: 'estado',
       valorAnterior: actual.estado, valorNuevo: 'CANCELADA', motivo: motivo.trim(), actorId, rolActor,
     });
+    reservasCancelacionesCounter.add(1, { tipoVehiculo: cancelada.tipoVehiculo });
     return cancelada;
   });
 }

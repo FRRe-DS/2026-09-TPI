@@ -7,6 +7,7 @@ import { Reserva, TipoVehiculo } from '../models/reserva';
 import { registrarHistorial } from '../repositories/historial.repository';
 import { buscarReservaPorClave, buscarReservaPorId, insertarReserva } from '../repositories/reserva.repository';
 import { confirmarReserva } from './confirmarReserva.service';
+import { reservasCreadasCounter } from '../telemetry/metrics';
 import {
   resolverUbicacion,
   validarClienteHabilitado,
@@ -170,11 +171,13 @@ export async function crearReserva(cuerpo: unknown): Promise<ResultadoCreacion> 
   // 4. RF-9.5: confirmar en otra transacción. Si falla, la reserva queda PENDIENTE (no se pierde).
   try {
     const confirmada = await confirmarReserva(creada.id);
+    reservasCreadasCounter.add(1, { resultado: 'creada', tipoVehiculo: entrada.tipoVehiculo });
     return { reserva: confirmada, yaExistia: false, confirmada: true };
   } catch (error) {
     console.error('No se pudo confirmar automáticamente la reserva:', error);
     const motivo = error instanceof AppError ? error.message : 'No se pudo confirmar automáticamente la reserva';
     const actual = await buscarReservaPorId(pool, creada.id);
+    reservasCreadasCounter.add(1, { resultado: 'pendiente', tipoVehiculo: entrada.tipoVehiculo });
     return { reserva: actual ?? creada, yaExistia: false, confirmada: false, motivo };
   }
 }
