@@ -10,7 +10,7 @@ body {
 }
 
 .contenedor {
-  max-width: 720px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 24px 16px;
   display: grid;
@@ -154,7 +154,7 @@ button.secundario {
 }
 
 .barra h1 {
-  max-width: 720px;
+  max-width: 1168px;
   margin: 0 auto;
   font-size: 26px;
 }
@@ -459,3 +459,39 @@ button:hover:not(:disabled) {
   color: #64748b;
 }
 
+/* ===== Diseño responsive ===== */
+/* Celular (desde 360 px): encabezado, formulario y lista apilados */
+@media (max-width: 599px) {
+  .contenedor {
+    padding: 16px 12px;
+    gap: 16px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  .barra {
+    padding: 14px 12px;
+  }
+
+  .barra h1 {
+    font-size: 20px;
+  }
+
+  .mapa {
+    height: 260px;
+  }
+}
+
+/* Compu: formulario a la izquierda y lista a la derecha */
+@media (min-width: 900px) {
+  .contenedor {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: start;
+  }
+
+  .contenedor > .aviso {
+    grid-column: 1 / -1;
+  }
+}
