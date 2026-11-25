@@ -1,5 +1,6 @@
 // Base común para llamar a otros módulos (RNF-13).
-// - Tiempo máximo de espera: TIMEOUT_MODULOS_MS.
+// - Tiempo máximo de espera: TIMEOUT_MODULOS_MS para el llamado completo,
+//   reintentos incluidos (los reintentos solo usan el tiempo que queda).
 // - Reintenta hasta 2 veces solo si falla la red o la respuesta es 5xx,
 //   y además la operación es GET o lleva clave de idempotencia.
 // - Reenvía X-Request-Id del pedido original y agrega el token de servicio.
@@ -67,8 +68,14 @@ export async function llamarModulo<T = unknown>(pedido: PedidoModulo): Promise<R
   const sePuedeReintentar = metodo === 'GET' || Boolean(claveIdempotencia);
   const intentos = sePuedeReintentar ? 1 + MAX_REINTENTOS : 1;
 
+  const limite = Date.now() + config.timeoutModulosMs;
+
   for (let intento = 1; intento <= intentos; intento++) {
     let falla: string;
+    const restante = limite - Date.now();
+    if (restante <= 0) {
+      throw noDisponible(modulo, `${modulo} no respondió en ${config.timeoutModulosMs} ms`);
+    }
 
     // La lectura del cuerpo va dentro del try: la conexión también puede cortarse
     // o agotar el tiempo después de que llegan los encabezados.
@@ -77,7 +84,7 @@ export async function llamarModulo<T = unknown>(pedido: PedidoModulo): Promise<R
         method: metodo,
         headers: encabezados,
         body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
-        signal: AbortSignal.timeout(config.timeoutModulosMs),
+        signal: AbortSignal.timeout(restante),
       });
       if (respuesta.status < 500) {
         return { status: respuesta.status, datos: (await leerCuerpo(respuesta)) as T };
@@ -86,7 +93,7 @@ export async function llamarModulo<T = unknown>(pedido: PedidoModulo): Promise<R
       // Se descarta el cuerpo del error para liberar la conexión antes de reintentar.
       await respuesta.body?.cancel().catch(() => undefined);
     } catch (error) {
-      // Tiempo agotado: no se reintenta, para no pasar el tiempo total de respuesta.
+      // Tiempo agotado: se terminó el tiempo total del llamado.
       if (error instanceof Error && error.name === 'TimeoutError') {
         throw noDisponible(modulo, `${modulo} no respondió en ${config.timeoutModulosMs} ms`);
       }

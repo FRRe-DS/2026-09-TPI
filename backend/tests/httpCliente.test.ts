@@ -236,4 +236,47 @@ describe('httpCliente.llamarModulo', () => {
     expect(fetchSimulado.mock.calls[0][1].headers['X-Request-Id']).toBe('explicito');
     expect(fetchSimulado.mock.calls[1][1].headers['X-Request-Id']).toBeUndefined();
   });
+
+  it('el tiempo máximo es para el llamado completo: los reintentos no lo estiran', async () => {
+    const original = config.timeoutModulosMs;
+    config.timeoutModulosMs = 120;
+    // Cada intento tarda 50 ms y responde 500: el tercero ya no entra en los 120 ms.
+    fetchSimulado.mockImplementation(
+      (_url: string, opciones: RequestInit) =>
+        new Promise((resolver, rechazar) => {
+          const espera = setTimeout(() => resolver(respuestaJson(500)), 50);
+          opciones.signal?.addEventListener('abort', () => {
+            clearTimeout(espera);
+            rechazar(opciones.signal?.reason);
+          });
+        }),
+    );
+
+    try {
+      const inicio = Date.now();
+      const error = await capturarError(llamarModulo({ modulo: 'M2', metodo: 'GET', url: URL_M2 }));
+      expect(error.status).toBe(503);
+      expect(Date.now() - inicio).toBeLessThan(200);
+      expect(fetchSimulado).toHaveBeenCalledTimes(3);
+    } finally {
+      config.timeoutModulosMs = original;
+    }
+  });
+
+  it('si el tiempo ya se terminó, no hace otro intento', async () => {
+    const original = config.timeoutModulosMs;
+    config.timeoutModulosMs = 30;
+    // El módulo tarda más que el tiempo total y responde 500: no queda tiempo para reintentar.
+    fetchSimulado.mockImplementation(
+      () => new Promise((resolver) => setTimeout(() => resolver(respuestaJson(500)), 60)),
+    );
+
+    try {
+      const error = await capturarError(llamarModulo({ modulo: 'M2', metodo: 'GET', url: URL_M2 }));
+      expect(error.status).toBe(503);
+      expect(fetchSimulado).toHaveBeenCalledTimes(1);
+    } finally {
+      config.timeoutModulosMs = original;
+    }
+  });
 });
