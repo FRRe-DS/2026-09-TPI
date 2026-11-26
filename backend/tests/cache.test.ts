@@ -1,21 +1,34 @@
+import { EventEmitter } from 'events';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockGet = vi.fn();
 const mockSet = vi.fn();
 const mockQuit = vi.fn();
 const mockDisconnect = vi.fn();
-const mockOn = vi.fn();
 const mockRedisConstructor = vi.fn();
+
+let estadoInicial = 'ready';
+let ultimoClienteMock: (EventEmitter & Record<string, unknown>) | null = null;
 
 vi.mock('ioredis', () => {
   return {
-    default: vi.fn(function (this: Record<string, unknown>, url: string, options: Record<string, unknown>) {
-      mockRedisConstructor(url, options);
+    default: vi.fn(function (
+      this: EventEmitter & Record<string, unknown>,
+      url: string,
+      options: Record<string, unknown>
+    ) {
+      const emisor = new EventEmitter();
+      this.on = emisor.on.bind(emisor);
+      this.once = emisor.once.bind(emisor);
+      this.off = emisor.off.bind(emisor);
+      this.emit = emisor.emit.bind(emisor);
+      this.status = estadoInicial;
       this.get = mockGet;
       this.set = mockSet;
       this.quit = mockQuit;
       this.disconnect = mockDisconnect;
-      this.on = mockOn;
+      ultimoClienteMock = this;
+      mockRedisConstructor(url, options);
     }),
   };
 });
@@ -23,6 +36,8 @@ vi.mock('ioredis', () => {
 describe('integraciones/cache', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    estadoInicial = 'ready';
+    ultimoClienteMock = null;
     vi.stubEnv('REDIS_URL', 'redis://localhost:6379');
   });
 
@@ -52,9 +67,10 @@ describe('integraciones/cache', () => {
     expect(mockRedisConstructor).toHaveBeenCalledTimes(1);
 
     const [, opciones] = mockRedisConstructor.mock.calls[0];
-    expect(opciones.retryStrategy()).toBeNull();
-    const errorHandler = mockOn.mock.calls.find(([ev]) => ev === 'error')?.[1];
-    expect(() => errorHandler?.(new Error('fallo conexión'))).not.toThrow();
+    expect(opciones.lazyConnect).toBeUndefined();
+    expect(opciones.retryStrategy(1)).toBe(200);
+    expect(opciones.retryStrategy(20)).toBe(2000);
+    expect(() => ultimoClienteMock?.emit('error', new Error('fallo conexión'))).not.toThrow();
   });
 
   it('guarda el valor con TTL en segundos y omite TTL <= 0', async () => {
@@ -66,6 +82,51 @@ describe('integraciones/cache', () => {
 
     await guardar('ruta:d', 'valor', 0);
     expect(mockSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('espera a que la conexión inicial pase a ready y luego ejecuta la operación', async () => {
+    estadoInicial = 'connecting';
+    mockGet.mockResolvedValueOnce('ok-despues-ready');
+    const { obtener } = await import('../src/integraciones/cache');
+
+    const promesa = obtener('ruta:inicial');
+    expect(mockGet).not.toHaveBeenCalled();
+
+    if (ultimoClienteMock) {
+      ultimoClienteMock.status = 'ready';
+      ultimoClienteMock.emit('ready');
+    }
+
+    await expect(promesa).resolves.toBe('ok-despues-ready');
+    expect(mockGet).toHaveBeenCalledWith('ruta:inicial');
+  });
+
+  it('devuelve vacío si falla la conexión inicial o si el cliente está reconectando', async () => {
+    estadoInicial = 'connecting';
+    const { obtener, guardar } = await import('../src/integraciones/cache');
+
+    const promesaError = obtener('ruta:error-inicial');
+    ultimoClienteMock?.emit('error', new Error('ECONNREFUSED'));
+    await expect(promesaError).resolves.toBeNull();
+
+    if (ultimoClienteMock) {
+      ultimoClienteMock.status = 'reconnecting';
+    }
+    await expect(obtener('ruta:reconectando')).resolves.toBeNull();
+    await expect(guardar('ruta:reconectando', 'x', 60)).resolves.toBeUndefined();
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('corta por timeout si la conexión inicial tarda más de 500 ms', async () => {
+    vi.useFakeTimers();
+    estadoInicial = 'connecting';
+    const { obtener } = await import('../src/integraciones/cache');
+
+    const promesa = obtener('ruta:lenta-conexion');
+    await vi.advanceTimersByTimeAsync(500);
+    await expect(promesa).resolves.toBeNull();
+    expect(mockGet).not.toHaveBeenCalled();
   });
 
   it('reemplaza el cliente si cambia REDIS_URL', async () => {
@@ -89,7 +150,7 @@ describe('integraciones/cache', () => {
     await expect(guardar('ruta:err', 'x', 60)).resolves.toBeUndefined();
   });
 
-  it('corta por timeout a los 500 ms sin lanzar error', async () => {
+  it('corta por timeout a los 500 ms si get o set se quedan colgados', async () => {
     vi.useFakeTimers();
     mockGet.mockImplementation(() => new Promise(() => {}));
     mockSet.mockImplementation(() => new Promise(() => {}));

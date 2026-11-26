@@ -22,11 +22,10 @@ function obtenerCliente(): Redis | null {
   }
 
   const cliente = new Redis(url, {
-    lazyConnect: true,
     maxRetriesPerRequest: 0,
     enableOfflineQueue: false,
     connectTimeout: TIMEOUT_REDIS_MS,
-    retryStrategy: () => null,
+    retryStrategy: (intentos: number) => Math.min(intentos * 200, 2000),
   });
 
   // Evita que ioredis emita eventos 'error' sin listener y tumbe el proceso.
@@ -37,13 +36,54 @@ function obtenerCliente(): Redis | null {
   return clienteRedis;
 }
 
-async function conTimeout<T>(operacion: Promise<T>, fallback: T): Promise<T> {
+function esperarConexionInicial(cliente: Redis, timeoutMs: number): Promise<boolean> {
+  if (cliente.status === 'ready') {
+    return Promise.resolve(true);
+  }
+  if (cliente.status !== 'connecting' && cliente.status !== 'connect') {
+    return Promise.resolve(false);
+  }
+
+  return new Promise<boolean>((resolve) => {
+    const limpiar = (listo: boolean) => {
+      clearTimeout(timer);
+      cliente.off('ready', alEstarListo);
+      cliente.off('error', alFallar);
+      cliente.off('close', alFallar);
+      cliente.off('end', alFallar);
+      resolve(listo);
+    };
+
+    const alEstarListo = () => limpiar(true);
+    const alFallar = () => limpiar(false);
+    const timer = setTimeout(() => limpiar(false), timeoutMs);
+
+    cliente.once('ready', alEstarListo);
+    cliente.once('error', alFallar);
+    cliente.once('close', alFallar);
+    cliente.once('end', alFallar);
+  });
+}
+
+async function ejecutarConCliente<T>(
+  cliente: Redis,
+  accion: (c: Redis) => Promise<T>,
+  fallback: T
+): Promise<T> {
+  const inicio = Date.now();
   let timer: ReturnType<typeof setTimeout> | undefined;
+
   try {
+    const listo = await esperarConexionInicial(cliente, TIMEOUT_REDIS_MS);
+    if (!listo) {
+      return fallback;
+    }
+
+    const restanteMs = Math.max(1, TIMEOUT_REDIS_MS - (Date.now() - inicio));
     return await Promise.race([
-      operacion,
+      accion(cliente),
       new Promise<T>((resolve) => {
-        timer = setTimeout(() => resolve(fallback), TIMEOUT_REDIS_MS);
+        timer = setTimeout(() => resolve(fallback), restanteMs);
       }),
     ]);
   } catch {
@@ -61,7 +101,7 @@ export async function obtener(clave: string): Promise<string | null> {
     return null;
   }
 
-  return conTimeout(cliente.get(clave), null);
+  return ejecutarConCliente(cliente, (c) => c.get(clave), null);
 }
 
 export async function guardar(
@@ -74,7 +114,11 @@ export async function guardar(
     return;
   }
 
-  await conTimeout(cliente.set(clave, valor, 'EX', Math.floor(segundosTTL)), undefined);
+  await ejecutarConCliente(
+    cliente,
+    (c) => c.set(clave, valor, 'EX', Math.floor(segundosTTL)),
+    undefined
+  );
 }
 
 export async function cerrarCache(): Promise<void> {
