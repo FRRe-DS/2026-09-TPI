@@ -20,10 +20,15 @@ info:
     **Integraciones:** M2 (cliente habilitado), M4 (cobertura y distancia), M7 (tarifa) y M5 (despacho)
     están simulados por ahora dentro del backend.
 servers:
+  - url: http://localhost:8089
+    description: Servidor local de desarrollo (Grupo 8)
+  - url: http://localhost:3000
+    description: Servidor local de desarrollo (Grupo 9)
   - url: https://m9-reservas.onrender.com
     description: Backend publicado en Render
-  - url: http://localhost:3000
-    description: Local (npm run dev o docker compose)
+security:
+  - BearerAuth: []
+
 tags:
   - name: Reservas
     description: Crear, consultar, modificar y cancelar reservas (RF-9.1 a RF-9.7)
@@ -37,6 +42,7 @@ tags:
 paths:
   /health:
     get:
+      security: []
       tags: [Salud]
       summary: Estado del servicio y de la conexión a la base
       operationId: health
@@ -362,6 +368,50 @@ paths:
         '500':
           $ref: '#/components/responses/ErrorInterno'
 
+  /reservas/{id}/despacho:
+    parameters:
+      - $ref: '#/components/parameters/ReservaId'
+    post:
+      tags: [Activación]
+      summary: Webhook de notificación de resultado de despacho (desde M5)
+      operationId: webhookDespacho
+      description: |
+        Callback consumido por M5 (Solicitud y Despacho) para informar el resultado de la asignación.
+        Si resultado es CONFIRMADA, la reserva transiciona a ACTIVADA. Si es VENCIDA, pasa a VENCIDA.
+        En ambos casos se notifica a M8. El endpoint es estrictamente idempotente.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DespachoWebhookRequest'
+      responses:
+        '200':
+          description: Notificación recibida y procesada correctamente (o ignorada si es duplicada).
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/XRequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DespachoWebhookResponse'
+        '400':
+          $ref: '#/components/responses/IdInvalido'
+        '403':
+          description: No posee rol SERVICIO
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          $ref: '#/components/responses/NoEncontrada'
+        '500':
+          $ref: '#/components/responses/ErrorInterno'
+
   /reservas/{id}/historial:
     parameters:
       - $ref: '#/components/parameters/ReservaId'
@@ -392,6 +442,13 @@ paths:
           $ref: '#/components/responses/ErrorInterno'
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT con rol CLIENTE, CONDUCTOR, OPERADOR o SERVICIO
+
   parameters:
     ReservaId:
       name: id
@@ -691,6 +748,36 @@ components:
           $ref: '#/components/schemas/Reserva'
         condiciones:
           $ref: '#/components/schemas/Condiciones'
+
+    DespachoWebhookRequest:
+      type: object
+      required: [solicitud_id, resultado, fecha]
+      properties:
+        solicitud_id:
+          type: string
+          example: sol-m5-001
+        resultado:
+          type: string
+          enum: [CONFIRMADA, VENCIDA]
+          example: CONFIRMADA
+        fecha:
+          type: string
+          format: date-time
+          example: '2026-10-23T11:45:00.000Z'
+
+    DespachoWebhookResponse:
+      type: object
+      properties:
+        mensaje:
+          type: string
+          example: Despacho procesado exitosamente
+        reservaId:
+          type: string
+          format: uuid
+        estadoActual:
+          type: string
+          enum: [ACTIVADA, VENCIDA]
+          example: ACTIVADA
 
     EntradaHistorial:
       type: object
