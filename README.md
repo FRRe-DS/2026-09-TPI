@@ -130,6 +130,28 @@ Desde la raíz del proyecto:
 docker compose up --build
 ```
 
+Esto levanta todo el entorno local en un solo comando:
+
+| Servicio | Puerto(s) | Descripción |
+|---|---|---|
+| `api` | `3000` | Backend M9 |
+| `frontend` | `5173` | Frontend React + Vite |
+| `keycloak` | `8080` | Identidad y acceso (realm `ds-2026-realm`, client público `m9-front` con PKCE) |
+| `rabbitmq` | `5672`, `15672` | Mensajería AMQP y consola de administración (`guest` / `guest`) |
+| `redis` | `6379` | Caché para estimaciones de ruta |
+
+#### Usuarios provisorios de Keycloak (entorno local)
+
+Configurados en `keycloak/realm-config/ds-2026-realm.json` (provisorios hasta recibir los `sub` reales de M2):
+
+| Usuario | Contraseña | Rol | `sub` |
+|---|---|---|---|
+| `cliente1` | `cliente123` | `CLIENTE` | `11111111-1111-4111-8111-111111111111` |
+| `cliente2` | `cliente123` | `CLIENTE` | `22222222-2222-4222-8222-222222222222` |
+| `operador1` | `operador123` | `OPERADOR` | `33333333-3333-4333-8333-333333333333` |
+
+Consola de administración de Keycloak: `http://localhost:8080` (por defecto `admin` / `admin`, configurable con `KEYCLOAK_ADMIN` y `KEYCLOAK_ADMIN_PASSWORD`).
+
 ## API REST
 
 Las rutas contempladas para la gestión de reservas son:
