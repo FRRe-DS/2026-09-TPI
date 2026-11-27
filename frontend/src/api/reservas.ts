@@ -1,4 +1,4 @@
-import type { Reserva, NuevaReserva, ErrorApi } from '../types';
+import type { Reserva, NuevaReserva, ErrorApi, Ubicacion, TipoVehiculo } from '../types';
 import { obtenerToken, pedirIngreso } from '../auth/sesion';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -18,10 +18,35 @@ export interface ResultadoCreacion {
     motivo?: string;
 }
 
+// Una fila del historial (GET /reservas/{id}/historial, esquema EntradaHistorial del contrato de M9)
+export interface EntradaHistorial {
+    id: string;
+    reservaId: string;
+    tipoCambio: string; // CREACION, CONFIRMACION, MODIFICACION, CANCELACION, ACTIVACION, VENCIMIENTO
+    campoModificado: string | null;
+    valorAnterior: string | null;
+    valorNuevo: string | null;
+    actorId: string | null;
+    rolActor: string; // CLIENTE, OPERADOR o SISTEMA
+    motivo: string | null;
+    fechaCambio: string;
+}
+
+// Lo que se puede cambiar con PATCH /reservas/{id} (todo opcional, esquema CambiosReserva del contrato)
+export interface CambiosReserva {
+    origen?: Ubicacion;
+    destino?: Ubicacion;
+    tipoVehiculo?: TipoVehiculo;
+    fechaHora?: string;
+    zonaHoraria?: string;
+}
+
 interface ReservasApi {
     listar(clienteId: string): Promise<Reserva[]>;
     crear(datos: NuevaReserva): Promise<ResultadoCreacion>;
     cancelar(id: string, motivo: string): Promise<Reserva>;
+    historial(id: string): Promise<EntradaHistorial[]>;
+    modificar(id: string, cambios: CambiosReserva): Promise<Reserva>;
 }
 
 // ---------- Backend real ----------
@@ -92,6 +117,12 @@ const real: ReservasApi = {
             method: 'POST',
             body: JSON.stringify({ motivo }),
         }),
+    historial: (id) => pedir<EntradaHistorial[]>(`/reservas/${id}/historial`),
+    modificar: (id, cambios) =>
+        pedir<Reserva>(`/reservas/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(cambios),
+        }),
 };
 
 // ---------- Simulación (mientras no hay backend) ----------
@@ -138,6 +169,21 @@ const mock: ReservasApi = {
         };
         reservasMock = reservasMock.map((x) => (x.id === id ? cancelada : x));
         return cancelada;
+    },
+    async historial() {
+        await esperar();
+        return [];
+    },
+    async modificar(id, cambios) {
+        await esperar();
+        const r = reservasMock.find((x) => x.id === id);
+        if (!r) throw new ApiError(404, 'La reserva no existe');
+        if (r.estado !== 'PENDIENTE' && r.estado !== 'CONFIRMADA') {
+            throw new ApiError(409, `No se puede modificar una reserva ${r.estado}`);
+        }
+        const modificada: Reserva = { ...r, ...cambios, modificadaEn: new Date().toISOString() };
+        reservasMock = reservasMock.map((x) => (x.id === id ? modificada : x));
+        return modificada;
     },
 };
 
