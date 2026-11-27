@@ -2,6 +2,10 @@ import { Fragment, useState } from 'react';
 import { reservasApi, ApiError } from '../api/reservas';
 import type { Reserva } from '../types';
 import { DetalleReserva } from './DetalleReserva';
+import { EstadoReserva } from './comunes/EstadoReserva';
+import { Cargando } from './comunes/Cargando';
+import { MensajeError } from './comunes/MensajeError';
+import { SinResultados } from './comunes/SinResultados';
 
 interface Props {
   reservas: Reserva[];
@@ -10,6 +14,8 @@ interface Props {
 
 export function ListaReservas({ reservas, onCambio }: Props) {
   const [error, setError] = useState('');
+  // Si la API no responde (503) se ofrece reintentar la misma cancelación
+  const [reintentarId, setReintentarId] = useState<string | null>(null);
   const [cancelandoId, setCancelandoId] = useState<string | null>(null);
   const [motivo, setMotivo] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -42,6 +48,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
     }
     setEnviando(true);
     setError('');
+    setReintentarId(null);
     try {
       await reservasApi.cancelar(id, motivo.trim());
       cerrar();
@@ -49,6 +56,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'error inesperado';
       setError(`No se pudo cancelar: ${msg}`);
+      if (err instanceof ApiError && err.status === 503) setReintentarId(id);
     } finally {
       setEnviando(false);
     }
@@ -67,10 +75,15 @@ export function ListaReservas({ reservas, onCambio }: Props) {
   return (
     <div className="card">
       <h2>Mis reservas</h2>
-      {error && <p className="mensaje error">{error}</p>}
+      {error && (
+        <MensajeError
+          mensaje={error}
+          onReintentar={reintentarId ? () => confirmar(reintentarId) : undefined}
+        />
+      )}
 
       {reservas.length === 0 ? (
-        <p>No tenés reservas todavía.</p>
+        <SinResultados texto="No tenés reservas todavía." />
       ) : (
         <div className="tabla-contenedor">
           <table className="tabla">
@@ -111,7 +124,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                       </td>
                       <td>{r.tarifaEstimada != null ? `$${r.tarifaEstimada}` : '-'}</td>
                       <td>
-                        <span className={`estado ${r.estado.toLowerCase()}`}>{r.estado}</span>
+                        <EstadoReserva estado={r.estado} />
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
                         {cancelandoId !== r.id && (
@@ -132,12 +145,16 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                               onChange={(e) => setMotivo(e.target.value)}
                               autoFocus
                             />
-                            <button onClick={() => confirmar(r.id)} disabled={enviando}>
-                              {enviando ? 'Cancelando…' : 'Confirmar'}
-                            </button>
-                            <button className="secundario" onClick={cerrar} disabled={enviando}>
-                              Volver
-                            </button>
+                            {enviando ? (
+                              <Cargando texto="Cancelando…" />
+                            ) : (
+                              <>
+                                <button onClick={() => confirmar(r.id)}>Confirmar</button>
+                                <button className="secundario" onClick={cerrar}>
+                                  Volver
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
