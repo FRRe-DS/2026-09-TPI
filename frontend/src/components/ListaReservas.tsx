@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react';
 import { reservasApi, ApiError } from '../api/reservas';
 import type { Reserva } from '../types';
+import { DetalleReserva } from './DetalleReserva';
 
 interface Props {
   reservas: Reserva[];
@@ -12,6 +13,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
   const [cancelandoId, setCancelandoId] = useState<string | null>(null);
   const [motivo, setMotivo] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
 
   // Ordena por fecha del viaje (el más cercano arriba) y deja las canceladas al final
   const ordenadas = [...reservas].sort((a, b) => {
@@ -52,6 +54,16 @@ export function ListaReservas({ reservas, onCambio }: Props) {
     }
   }
 
+  const enDetalle = detalleId ? reservas.find((r) => r.id === detalleId) : undefined;
+  if (enDetalle) {
+    return (
+      <div className="card">
+        <h2>Mis reservas</h2>
+        <DetalleReserva reserva={enDetalle} onCerrar={() => setDetalleId(null)} onActualizar={onCambio} />
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <h2>Mis reservas</h2>
@@ -78,7 +90,13 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                   r.estado === 'CANCELADA' || r.estado === 'ACTIVADA' || r.estado === 'VENCIDA';
                 return (
                   <Fragment key={r.id}>
-                    <tr className={r.estado.toLowerCase()}>
+                    <tr
+                      className={r.estado.toLowerCase()}
+                      onClick={() => setDetalleId(r.id)}
+                      onKeyDown={(e) => e.key === 'Enter' && setDetalleId(r.id)}
+                      tabIndex={0}
+                      title="Ver detalle"
+                    >
                       <td>
                         <strong>
                           {r.origen.direccion} → {r.destino.direccion}
@@ -95,7 +113,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                       <td>
                         <span className={`estado ${r.estado.toLowerCase()}`}>{r.estado}</span>
                       </td>
-                      <td>
+                      <td onClick={(e) => e.stopPropagation()}>
                         {cancelandoId !== r.id && (
                           <button className="btn-cancelar" onClick={() => abrir(r.id)} disabled={noCancelable}>
                             Cancelar
@@ -106,7 +124,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
 
                     {cancelandoId === r.id && (
                       <tr className="fila-cancelar">
-                        <td colSpan={6}>
+                        <td colSpan={6} onClick={(e) => e.stopPropagation()}>
                           <div className="cancelar">
                             <input
                               placeholder="Motivo de la cancelación"
