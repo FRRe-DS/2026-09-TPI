@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { FormReserva } from './components/FormReserva';
 import { ListaReservas } from './components/ListaReservas';
@@ -45,15 +45,15 @@ function VistaCliente() {
       .finally(() => setCargando(false));
   }, [version]);
 
-  const recargar = () => {
-    setCargando(true);
-    setVersion((v) => v + 1);
-  };
+  // Vuelve a pedir la lista sin desmontarla: así no se cierra el detalle que esté abierto
+  // (se usa también en la actualización automática cada 10 segundos)
+  const recargar = useCallback(() => setVersion((v) => v + 1), []);
 
   return (
     <>
       <FormReserva onCreada={recargar} />
 
+      {/* "Cargando" solo la primera vez; en las recargas la lista queda visible */}
       {cargando ? (
         <Cargando texto="Cargando reservas…" />
       ) : error ? (
