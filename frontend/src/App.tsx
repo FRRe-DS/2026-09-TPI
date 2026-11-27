@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { FormReserva } from './components/FormReserva';
 import { ListaReservas } from './components/ListaReservas';
-import { reservasApi, USE_MOCK } from './api/reservas';
+import { MensajeError } from './components/comunes/MensajeError';
+import { reservasApi, USE_MOCK, ApiError } from './api/reservas';
+import { obtenerNombreUsuario, cerrarSesion } from './auth/sesion';
 import type { Reserva } from './types';
 
 // Provisorio hasta que exista el login (M1). Es un cliente del db/seed.sql.
@@ -11,6 +13,7 @@ export default function App() {
   const [reservas, setReservas] = useState<Reserva[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
+  const [puedeReintentar, setPuedeReintentar] = useState(false);
   const [version, setVersion] = useState(0);
 
   useEffect(() => {
@@ -20,7 +23,11 @@ export default function App() {
         setReservas(lista);
         setError('');
       })
-      .catch(() => setError('No se pudieron cargar las reservas'))
+      .catch((err) => {
+        setError(err instanceof ApiError ? err.message : 'No se pudieron cargar las reservas');
+        // Si un servicio no responde (503), se ofrece volver a intentar
+        setPuedeReintentar(err instanceof ApiError && err.status === 503);
+      })
       .finally(() => setCargando(false));
   }, [version]);
 
@@ -29,7 +36,15 @@ export default function App() {
    return (
     <>
       <header className="barra">
-        <h1>Reservas de viajes</h1>
+        <div className="barra-contenido">
+          <h1>Reservas de viajes</h1>
+          <div className="usuario">
+            <span>{obtenerNombreUsuario()}</span>
+            <button type="button" className="secundario" onClick={() => void cerrarSesion()}>
+              Salir
+            </button>
+          </div>
+        </div>
       </header>
 
       <main className="contenedor">
@@ -42,7 +57,7 @@ export default function App() {
         {cargando ? (
           <p>Cargando reservas…</p>
         ) : error ? (
-          <p className="mensaje error">{error}</p>
+          <MensajeError mensaje={error} onReintentar={puedeReintentar ? recargar : undefined} />
         ) : (
           <ListaReservas reservas={reservas} onCambio={recargar} />
         )}

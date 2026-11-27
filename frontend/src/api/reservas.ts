@@ -1,4 +1,5 @@
 import type { Reserva, NuevaReserva, ErrorApi } from '../types';
+import { obtenerToken, pedirIngreso } from '../auth/sesion';
 
 const API_URL = import.meta.env.VITE_API_URL;
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
@@ -24,18 +25,40 @@ interface ReservasApi {
 }
 
 // ---------- Backend real ----------
+// Mensajes claros para los errores que no dependen de lo que explique la API
+const MENSAJES_POR_ESTADO: Record<number, string> = {
+    401: 'Tu sesión venció, volvé a ingresar',
+    403: 'No tenés permiso',
+    409: 'La reserva cambió, actualizá la pantalla',
+    503: 'Un servicio no responde',
+};
+
 async function pedir<T>(ruta: string, opciones?: RequestInit): Promise<T> {
+    const token = await obtenerToken();
     let res: Response;
     try {
         res = await fetch(`${API_URL}${ruta}`, {
-            headers: { 'Content-Type': 'application/json' },
             ...opciones,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
         });
     } catch {
         throw new ApiError(0, 'No se pudo conectar con el servidor');
     }
 
     if (!res.ok) {
+        if (res.status === 401) {
+            // Sin sesión válida: se vuelve a mostrar la pantalla de ingreso
+            void pedirIngreso();
+        }
+        const mensajeFijo = MENSAJES_POR_ESTADO[res.status];
+        if (mensajeFijo) {
+            throw new ApiError(res.status, mensajeFijo);
+        }
+
+        // 422 y el resto: se muestra el motivo que devuelve la API
         let mensaje = `Error ${res.status}`;
         try {
             const err: ErrorApi = await res.json();
