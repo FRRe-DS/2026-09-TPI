@@ -115,3 +115,26 @@
 - **Dificultad o bloqueo:** Ninguna en la compilación; queda pendiente el despliegue en entorno cloud conectado a Grafana Cloud y las corridas finales de k6 (50, 100, 500 y 1000 VUs).
 - **Siguiente acción:**
   1. Desplegar el servicio en entorno cloud conectado a Grafana Cloud y ejecutar la batería final de k6 (50, 100, 500 y 1000 VUs).
+
+---
+
+### Entrada 5 — 27/11/2026 (CD en GitHub Container Registry + Logs OTLP hacia Loki)
+
+- **Fecha:** 27/11/2026
+- **Responsable/s:** Equipo DevOps (Grupo 03)
+- **Módulo:** M9 — Reservas de Viajes
+- **Objetivo:** Publicar automáticamente la imagen Docker del módulo en GitHub Container Registry (`ghcr.io`) y completar la observabilidad en Grafana incorporando la exportación de logs vía OpenTelemetry hacia Loki.
+- **Tarea ejecutada:**
+  1. **CD en GitHub Container Registry (GHCR):** Se incorporó `.github/workflows/docker-publish.yml` (usando `./backend/Dockerfile`) para compilar y publicar automáticamente la imagen `ghcr.io/frre-ds/m9_g9:latest` (y por `sha`) en cada push o merge a `main`.
+  2. **Exportación de Logs OTLP hacia Loki:** Se instalaron `@opentelemetry/api-logs`, `@opentelemetry/sdk-logs` y `@opentelemetry/exporter-logs-otlp-http`, actualizando `backend/src/telemetry/sdk.ts` con `BatchLogRecordProcessor` y puenteo de `console.log`/`warn`/`error` hacia OpenTelemetry Logs (correlacionados con `trace_id`/`span_id` del contexto activo).
+  3. **Panel de Logs en Dashboard:** Se actualizó `observability/m9-dashboard.json` agregando el Panel 9 de logs en Loki (`{service_name=~"m9-reservas.*"}`), validando la compilación TypeScript (`npm run build` exitoso).
+- **Decisiones / acuerdos con Desarrollo:**
+  - Publicar la imagen en `ghcr.io/frre-ds/m9_g9` en minúsculas (requerimiento de Docker/GHCR) para facilitar el despliegue en la nube y el intercambio entre grupos.
+- **Repositorio / Issue / PR:**
+  - Rama: `main` (PRs #10/#11 de `devops/ghcr-publish` mergeados y logs OTLP pusheados en `82356d0`).
+- **Evidencia (URL, captura o reporte):**
+  - Imagen `ghcr.io/frre-ds/m9_g9:latest`, compilación `tsc` exitosa y dashboard completo con métricas, trazas y logs en `observability/m9-dashboard.json`.
+- **Resultado:** Pipeline de CD hacia GHCR y tríada completa de observabilidad (métricas, trazas y logs) listos para el despliegue en cloud.
+- **Dificultad o bloqueo:** `BatchLogRecordProcessor` requirió pasar `{ exporter: new OTLPLogExporter() }` en la versión instalada de `@opentelemetry/sdk-logs`; se corrigió y validó con `tsc`.
+- **Siguiente acción:**
+  1. Desplegar la imagen en entorno cloud conectada a Grafana Cloud y ejecutar las pruebas finales de k6 (50, 100, 500 y 1000 VUs) para la presentación del 30/11.
