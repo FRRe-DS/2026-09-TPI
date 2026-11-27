@@ -12,10 +12,20 @@ export class ApiError extends Error {
     }
 }
 
-// Lo que nos interesa de la respuesta al crear: la reserva y, si quedó PENDIENTE, el motivo
+// Condiciones de confirmación, modificación, cancelación y tarifa (esquema Condiciones del contrato de M9)
+export interface Condiciones {
+    confirmacion?: string;
+    modificacion?: string;
+    cancelacion?: string;
+    activacion?: string;
+    tarifa?: string;
+}
+
+// Lo que nos interesa de la respuesta al crear: la reserva, el motivo si quedó PENDIENTE y las condiciones
 export interface ResultadoCreacion {
     reserva: Reserva;
     motivo?: string;
+    condiciones?: Condiciones;
 }
 
 interface ReservasApi {
@@ -79,13 +89,13 @@ const real: ReservasApi = {
     listar: (clienteId) =>
         pedir<Reserva[]>(`/reservas?clienteId=${encodeURIComponent(clienteId)}`),
     // El backend pide una claveIdempotencia (UUID) para no crear dos veces la misma reserva,
-    // y responde { mensaje, motivo, reserva, condiciones }: nos quedamos con la reserva y el motivo.
+    // y responde { mensaje, motivo, reserva, condiciones }: nos quedamos con la reserva, el motivo y las condiciones.
     crear: async (datos) => {
         const respuesta = await pedir<ResultadoCreacion>('/reservas', {
             method: 'POST',
             body: JSON.stringify({ ...datos, claveIdempotencia: crypto.randomUUID() }),
         });
-        return { reserva: respuesta.reserva, motivo: respuesta.motivo };
+        return { reserva: respuesta.reserva, motivo: respuesta.motivo, condiciones: respuesta.condiciones };
     },
     cancelar: (id, motivo) =>
         pedir<Reserva>(`/reservas/${id}/cancelar`, {
