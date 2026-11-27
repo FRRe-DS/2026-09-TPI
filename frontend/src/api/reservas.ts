@@ -1,4 +1,5 @@
-import type { Reserva, NuevaReserva, ErrorApi } from '../types';
+import type { Reserva, NuevaReserva, ErrorApi, Ubicacion, TipoVehiculo } from '../types';
+import { obtenerToken, pedirIngreso } from '../auth/sesion';
 
 const API_URL = import.meta.env.VITE_API_URL;
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
@@ -17,25 +18,72 @@ export interface ResultadoCreacion {
     motivo?: string;
 }
 
+// Una fila del historial (GET /reservas/{id}/historial, esquema EntradaHistorial del contrato de M9)
+export interface EntradaHistorial {
+    id: string;
+    reservaId: string;
+    tipoCambio: string; // CREACION, CONFIRMACION, MODIFICACION, CANCELACION, ACTIVACION, VENCIMIENTO
+    campoModificado: string | null;
+    valorAnterior: string | null;
+    valorNuevo: string | null;
+    actorId: string | null;
+    rolActor: string; // CLIENTE, OPERADOR o SISTEMA
+    motivo: string | null;
+    fechaCambio: string;
+}
+
+// Lo que se puede cambiar con PATCH /reservas/{id} (todo opcional, esquema CambiosReserva del contrato)
+export interface CambiosReserva {
+    origen?: Ubicacion;
+    destino?: Ubicacion;
+    tipoVehiculo?: TipoVehiculo;
+    fechaHora?: string;
+    zonaHoraria?: string;
+}
+
 interface ReservasApi {
     listar(clienteId: string): Promise<Reserva[]>;
     crear(datos: NuevaReserva): Promise<ResultadoCreacion>;
     cancelar(id: string, motivo: string): Promise<Reserva>;
+    historial(id: string): Promise<EntradaHistorial[]>;
+    modificar(id: string, cambios: CambiosReserva): Promise<Reserva>;
 }
 
 // ---------- Backend real ----------
+// Mensajes claros para los errores que no dependen de lo que explique la API
+const MENSAJES_POR_ESTADO: Record<number, string> = {
+    401: 'Tu sesión venció, volvé a ingresar',
+    403: 'No tenés permiso',
+    409: 'La reserva cambió, actualizá la pantalla',
+    503: 'Un servicio no responde',
+};
+
 async function pedir<T>(ruta: string, opciones?: RequestInit): Promise<T> {
+    const token = await obtenerToken();
     let res: Response;
     try {
         res = await fetch(`${API_URL}${ruta}`, {
-            headers: { 'Content-Type': 'application/json' },
             ...opciones,
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
         });
     } catch {
         throw new ApiError(0, 'No se pudo conectar con el servidor');
     }
 
     if (!res.ok) {
+        if (res.status === 401) {
+            // Sin sesión válida: se vuelve a mostrar la pantalla de ingreso
+            void pedirIngreso();
+        }
+        const mensajeFijo = MENSAJES_POR_ESTADO[res.status];
+        if (mensajeFijo) {
+            throw new ApiError(res.status, mensajeFijo);
+        }
+
+        // 422 y el resto: se muestra el motivo que devuelve la API
         let mensaje = `Error ${res.status}`;
         try {
             const err: ErrorApi = await res.json();
@@ -68,6 +116,12 @@ const real: ReservasApi = {
         pedir<Reserva>(`/reservas/${id}/cancelar`, {
             method: 'POST',
             body: JSON.stringify({ motivo }),
+        }),
+    historial: (id) => pedir<EntradaHistorial[]>(`/reservas/${id}/historial`),
+    modificar: (id, cambios) =>
+        pedir<Reserva>(`/reservas/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(cambios),
         }),
 };
 
@@ -115,6 +169,21 @@ const mock: ReservasApi = {
         };
         reservasMock = reservasMock.map((x) => (x.id === id ? cancelada : x));
         return cancelada;
+    },
+    async historial() {
+        await esperar();
+        return [];
+    },
+    async modificar(id, cambios) {
+        await esperar();
+        const r = reservasMock.find((x) => x.id === id);
+        if (!r) throw new ApiError(404, 'La reserva no existe');
+        if (r.estado !== 'PENDIENTE' && r.estado !== 'CONFIRMADA') {
+            throw new ApiError(409, `No se puede modificar una reserva ${r.estado}`);
+        }
+        const modificada: Reserva = { ...r, ...cambios, modificadaEn: new Date().toISOString() };
+        reservasMock = reservasMock.map((x) => (x.id === id ? modificada : x));
+        return modificada;
     },
 };
 

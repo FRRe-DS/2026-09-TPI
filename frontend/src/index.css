@@ -409,3 +409,81 @@ button:hover:not(:disabled) {
   margin: 0;
   font-size: 15px;
 }
+/* ===== Componentes comunes ===== */
+.estado.vencida {
+  background: #64748b33;
+}
+
+.cargando {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.cargando-icono {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--borde);
+  border-top-color: var(--verde);
+  border-radius: 50%;
+  animation: girar 0.8s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.mensaje-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: light-dark(#fef2f2, #2a1215);
+}
+
+.mensaje-error button {
+  padding: 6px 12px;
+}
+
+.sin-resultados {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+
+/* ===== Encabezado con el usuario y el botón Salir ===== */
+.barra-contenido {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.barra-contenido h1 {
+  margin: 0;
+}
+
+.usuario {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.usuario button {
+  padding: 6px 12px;
+  color: white;
+  border-color: #ffffff99;
+}
