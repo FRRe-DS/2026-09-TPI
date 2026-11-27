@@ -11,6 +11,10 @@ vi.mock('../src/services/confirmarReserva.service', () => ({
 }));
 
 import { app } from '../src/app';
+import { activarModulosSimulados } from './modulosSimulados';
+
+// M2 y M7 simulados por red (ver tests/modulosSimulados.ts).
+activarModulosSimulados();
 
 describe('Fallo técnico durante la confirmación automática', () => {
 

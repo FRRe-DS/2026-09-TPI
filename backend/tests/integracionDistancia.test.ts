@@ -10,7 +10,11 @@ vi.mock('../src/services/calculoDistancia.service', () => ({
 }));
 
 import { app } from '../src/app';
+import { activarModulosSimulados } from './modulosSimulados';
 import { calcularDistancia } from '../src/services/calculoDistancia.service';
+
+// M2 y M7 simulados por red (ver tests/modulosSimulados.ts).
+activarModulosSimulados();
 
 describe('Integración M9 con M4 - Cálculo de distancia', () => {
 
