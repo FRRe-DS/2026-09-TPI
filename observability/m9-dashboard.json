@@ -92,6 +92,21 @@
           { "expr": "sum by (http_response_status_code) (rate(http_server_request_duration_seconds_count{http_response_status_code=~\"4..|5..\"}[1m]))", "legendFormat": "HTTP {{http_response_status_code}}", "refId": "A" },
           { "expr": "nodejs_eventloop_utilization_ratio", "legendFormat": "Event Loop Utilization", "refId": "B" }
         ]
+      },
+      {
+        "id": 9,
+        "type": "logs",
+        "title": "Logs de la aplicación (Loki - correlacionados con trazas)",
+        "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+        "datasource": { "type": "loki", "uid": "loki" },
+        "options": {
+          "showTime": true,
+          "wrapLogMessage": true,
+          "enableLogDetails": true
+        },
+        "targets": [
+          { "expr": "{service_name=~\"m9-reservas.*\"}", "refId": "A" }
+        ]
       }
     ]
   },
