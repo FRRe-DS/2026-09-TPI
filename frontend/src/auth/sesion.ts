@@ -45,8 +45,11 @@ export function obtenerNombreUsuario(): string {
   return datos?.name ?? datos?.preferred_username ?? '';
 }
 
+// El realm de la cátedra manda los roles del usuario en el claim "roles" del token
+// (no en realm_access), así que se lee de ahí
 export function esOperador(): boolean {
-  return keycloak.hasRealmRole('OPERADOR');
+  const datos = keycloak.tokenParsed as { roles?: unknown } | undefined;
+  return Array.isArray(datos?.roles) && datos.roles.includes('OPERADOR');
 }
 
 // Vuelve a mostrar la pantalla de ingreso de Keycloak (se usa cuando la API responde 401)
