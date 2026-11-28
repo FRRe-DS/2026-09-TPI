@@ -1,6 +1,11 @@
 import { Fragment, useState } from 'react';
 import { reservasApi, ApiError } from '../api/reservas';
 import type { Reserva } from '../types';
+import { DetalleReserva } from './DetalleReserva';
+import { EstadoReserva } from './comunes/EstadoReserva';
+import { Cargando } from './comunes/Cargando';
+import { MensajeError } from './comunes/MensajeError';
+import { SinResultados } from './comunes/SinResultados';
 
 interface Props {
   reservas: Reserva[];
@@ -9,9 +14,12 @@ interface Props {
 
 export function ListaReservas({ reservas, onCambio }: Props) {
   const [error, setError] = useState('');
+  // Si la API no responde (503) se ofrece reintentar la misma cancelación
+  const [reintentarId, setReintentarId] = useState<string | null>(null);
   const [cancelandoId, setCancelandoId] = useState<string | null>(null);
   const [motivo, setMotivo] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
 
   // Ordena por fecha del viaje (el más cercano arriba) y deja las canceladas al final
   const ordenadas = [...reservas].sort((a, b) => {
@@ -40,6 +48,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
     }
     setEnviando(true);
     setError('');
+    setReintentarId(null);
     try {
       await reservasApi.cancelar(id, motivo.trim());
       cerrar();
@@ -47,18 +56,34 @@ export function ListaReservas({ reservas, onCambio }: Props) {
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : 'error inesperado';
       setError(`No se pudo cancelar: ${msg}`);
+      if (err instanceof ApiError && err.status === 503) setReintentarId(id);
     } finally {
       setEnviando(false);
     }
   }
 
+  const enDetalle = detalleId ? reservas.find((r) => r.id === detalleId) : undefined;
+  if (enDetalle) {
+    return (
+      <div className="card">
+        <h2>Mis reservas</h2>
+        <DetalleReserva reserva={enDetalle} onCerrar={() => setDetalleId(null)} onActualizar={onCambio} />
+      </div>
+    );
+  }
+
   return (
     <div className="card">
       <h2>Mis reservas</h2>
-      {error && <p className="mensaje error">{error}</p>}
+      {error && (
+        <MensajeError
+          mensaje={error}
+          onReintentar={reintentarId ? () => confirmar(reintentarId) : undefined}
+        />
+      )}
 
       {reservas.length === 0 ? (
-        <p>No tenés reservas todavía.</p>
+        <SinResultados texto="No tenés reservas todavía." />
       ) : (
         <div className="tabla-contenedor">
           <table className="tabla">
@@ -78,7 +103,13 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                   r.estado === 'CANCELADA' || r.estado === 'ACTIVADA' || r.estado === 'VENCIDA';
                 return (
                   <Fragment key={r.id}>
-                    <tr className={r.estado.toLowerCase()}>
+                    <tr
+                      className={r.estado.toLowerCase()}
+                      onClick={() => setDetalleId(r.id)}
+                      onKeyDown={(e) => e.key === 'Enter' && setDetalleId(r.id)}
+                      tabIndex={0}
+                      title="Ver detalle"
+                    >
                       <td>
                         <strong>
                           {r.origen.direccion} → {r.destino.direccion}
@@ -93,9 +124,9 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                       </td>
                       <td>{r.tarifaEstimada != null ? `$${r.tarifaEstimada}` : '-'}</td>
                       <td>
-                        <span className={`estado ${r.estado.toLowerCase()}`}>{r.estado}</span>
+                        <EstadoReserva estado={r.estado} />
                       </td>
-                      <td>
+                      <td onClick={(e) => e.stopPropagation()}>
                         {cancelandoId !== r.id && (
                           <button className="btn-cancelar" onClick={() => abrir(r.id)} disabled={noCancelable}>
                             Cancelar
@@ -106,7 +137,7 @@ export function ListaReservas({ reservas, onCambio }: Props) {
 
                     {cancelandoId === r.id && (
                       <tr className="fila-cancelar">
-                        <td colSpan={6}>
+                        <td colSpan={6} onClick={(e) => e.stopPropagation()}>
                           <div className="cancelar">
                             <input
                               placeholder="Motivo de la cancelación"
@@ -114,12 +145,16 @@ export function ListaReservas({ reservas, onCambio }: Props) {
                               onChange={(e) => setMotivo(e.target.value)}
                               autoFocus
                             />
-                            <button onClick={() => confirmar(r.id)} disabled={enviando}>
-                              {enviando ? 'Cancelando…' : 'Confirmar'}
-                            </button>
-                            <button className="secundario" onClick={cerrar} disabled={enviando}>
-                              Volver
-                            </button>
+                            {enviando ? (
+                              <Cargando texto="Cancelando…" />
+                            ) : (
+                              <>
+                                <button onClick={() => confirmar(r.id)}>Confirmar</button>
+                                <button className="secundario" onClick={cerrar}>
+                                  Volver
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
