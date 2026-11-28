@@ -1,6 +1,7 @@
 // RF-9.1 a RF-9.5: crear una reserva.
-// Usa las MISMAS reglas que confirmar y modificar (reserva.validaciones.ts + stubs de M2, M4 y M7)
+// Usa las MISMAS reglas que confirmar y modificar (reserva.validaciones.ts, con M2, M4 y M7)
 // y deja en el historial la CREACION ('C') y la CONFIRMACION ('Y') (RF-9.12).
+// Cada módulo se llama una sola vez: la confirmación automática reutiliza la tarifa ya estimada.
 import { pool, transaccion } from '../db/pool';
 import { AppError, errores } from '../errors/AppError';
 import { Reserva, TipoVehiculo } from '../models/reserva';
@@ -123,7 +124,24 @@ function esClaveDuplicada(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505';
 }
 
+// Métrica de rechazos: motivo = la regla del 422 (detalle.regla) o el código de los demás errores.
+function motivoDelRechazo(error: unknown): string {
+  if (!(error instanceof AppError)) return 'ERROR_INTERNO';
+  const regla = (error.detalle as { regla?: unknown } | undefined)?.regla;
+  return typeof regla === 'string' ? regla : error.codigo;
+}
+
 export async function crearReserva(cuerpo: unknown): Promise<ResultadoCreacion> {
+  try {
+    return await crearYConfirmar(cuerpo);
+  } catch (error) {
+    // Un reintento con la misma clave no llega acá: devuelve la reserva existente y no es un rechazo.
+    reservasCreadasCounter.add(1, { resultado: 'rechazada', motivo: motivoDelRechazo(error) });
+    throw error;
+  }
+}
+
+async function crearYConfirmar(cuerpo: unknown): Promise<ResultadoCreacion> {
   const entrada = validarEntrada(cuerpo);
 
   // 1. Idempotencia: si la clave ya se usó, no se crea otra reserva.
@@ -136,7 +154,9 @@ export async function crearReserva(cuerpo: unknown): Promise<ResultadoCreacion> 
   const origen = await resolverUbicacion(entrada.origen);
   const destino = await resolverUbicacion(entrada.destino);
   validarOrigenDestinoDistintos(origen, destino);
-  const { tarifaEstimada } = await validarRutaYEstimarTarifa(origen, destino, entrada.tipoVehiculo);
+  const { tarifaEstimada } = await validarRutaYEstimarTarifa(
+    origen, destino, entrada.tipoVehiculo, entrada.fechaHora,
+  );
 
   // 3. Guardar la reserva PENDIENTE y su 'C' en el historial, juntas en una transacción.
   let creada: Reserva;
@@ -168,9 +188,10 @@ export async function crearReserva(cuerpo: unknown): Promise<ResultadoCreacion> 
     throw error;
   }
 
-  // 4. RF-9.5: confirmar en otra transacción. Si falla, la reserva queda PENDIENTE (no se pierde).
+  // 4. RF-9.5: confirmar en otra transacción con la tarifa ya estimada (sin volver a llamar
+  // a M2, M4 ni M7). Si falla, la reserva queda PENDIENTE (no se pierde).
   try {
-    const confirmada = await confirmarReserva(creada.id);
+    const confirmada = await confirmarReserva(creada.id, tarifaEstimada);
     reservasCreadasCounter.add(1, { resultado: 'creada', tipoVehiculo: entrada.tipoVehiculo });
     return { reserva: confirmada, yaExistia: false, confirmada: true };
   } catch (error) {

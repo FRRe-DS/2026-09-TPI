@@ -5,6 +5,7 @@ import type { Reserva } from '../src/models/reserva';
 
 vi.mock('../src/config/env', () => ({ config: {
   anticipacionMinimaMinutos: 60, anticipacionMaximaDias: 30, corsOrigin: '*',
+  timeoutModulosMs: 3000, keycloakRealm: 'ds-2026-realm', keycloakClientId: 'grupo-09',
 } }));
 vi.mock('../src/db/pool', () => ({ pool: {}, transaccion: vi.fn() }));
 vi.mock('../src/repositories/reserva.repository');
@@ -15,6 +16,7 @@ import { transaccion } from '../src/db/pool';
 import { actualizarDatosReserva, buscarReservaPorId, cancelarReservaEnBase, confirmarReservaEnBase } from '../src/repositories/reserva.repository';
 import { listarHistorial, registrarHistorial } from '../src/repositories/historial.repository';
 import { confirmarReserva } from '../src/services/confirmarReserva.service';
+import { activarModulosSimulados } from './modulosSimulados';
 
 const id = '11111111-1111-4111-8111-111111111111';
 const db = {} as PoolClient;
@@ -22,6 +24,7 @@ let reserva: Reserva;
 
 beforeEach(() => {
   vi.resetAllMocks();
+  activarModulosSimulados(); // M2 y M7 simulados por red (ver tests/modulosSimulados.ts)
   reserva = {
     id, clienteId: 'cli-001', estado: 'CONFIRMADA', tipoVehiculo: 'AUTO',
     origen: { direccion: 'Centro', latitud: -27.45, longitud: -58.98 },
@@ -38,11 +41,12 @@ beforeEach(() => {
 });
 
 describe('reservas con repositorios simulados (sin base de datos)', () => {
-  it('confirma una pendiente y registra tarifa e historial en la transacción recibida', async () => {
+  it('confirma una pendiente: valida fuera de la transacción y guarda tarifa e historial en una transacción corta', async () => {
     reserva.estado = 'PENDIENTE';
     // AUTO: 1000 + 300 por km; Centro -> Aeropuerto = 7 km
-    expect(await confirmarReserva(id, db)).toMatchObject({ estado: 'CONFIRMADA', tarifaEstimada: 3100 });
-    expect(transaccion).not.toHaveBeenCalled();
+    expect(await confirmarReserva(id)).toMatchObject({ estado: 'CONFIRMADA', tarifaEstimada: 3100 });
+    expect(transaccion).toHaveBeenCalledTimes(1);
+    expect(buscarReservaPorId).toHaveBeenCalledWith({}, id); // pool, sin bloquear
     expect(registrarHistorial).toHaveBeenCalledExactlyOnceWith(db, expect.objectContaining({ tipoCambio: 'CONFIRMACION' }));
   });
 

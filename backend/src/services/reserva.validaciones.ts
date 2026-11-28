@@ -1,9 +1,9 @@
 import { config } from '../config/env';
 import { AppError, errores } from '../errors/AppError';
 import { CambiosReserva, Direccion, TipoVehiculo } from '../models/reserva';
-import { verificarClienteHabilitado } from '../stubs/m2Clientes.stub';
+import { verificarClienteHabilitado } from '../integraciones/m2Clientes';
 import { consultarRuta } from '../stubs/m4Ubicacion.stub';
-import { estimarTarifa } from '../stubs/m7Tarifas.stub';
+import { estimarTarifa } from '../integraciones/m7Tarifas';
 import { obtenerCoordenadas } from './geocodificacion.service';
 
 const CAMPOS = ['origen', 'destino', 'tipoVehiculo', 'fechaHora', 'zonaHoraria'];
@@ -60,11 +60,13 @@ export async function validarClienteHabilitado(clienteId: string): Promise<void>
   }
 }
 
-// RF-9.3 y RF-9.4: cobertura y distancia (M4) y tarifa estimada (M7). Una sola "calculadora" para todos.
+// RF-9.3 y RF-9.4: cobertura, distancia y duración (M4) y tarifa estimada (M7). Una sola "calculadora" para todos.
+// M7 recibe la distancia y la duración que da M4, y la fecha y hora del viaje.
 export async function validarRutaYEstimarTarifa(
   origen: Direccion,
   destino: Direccion,
   tipoVehiculo: TipoVehiculo,
+  fechaHora: Date,
 ): Promise<{ tarifaEstimada: number; distanciaKm: number }> {
   const ruta = await consultarRuta(origen, destino);
   if (!ruta.cubierta) {
@@ -72,7 +74,12 @@ export async function validarRutaYEstimarTarifa(
       regla: 'FUERA_DE_COBERTURA',
     });
   }
-  const tarifaEstimada = await estimarTarifa(tipoVehiculo, ruta.distanciaKm);
+  const tarifaEstimada = await estimarTarifa({
+    tipoVehiculo,
+    distanciaKm: ruta.distanciaKm,
+    duracionMin: ruta.duracionMin,
+    fechaHora,
+  });
   return { tarifaEstimada, distanciaKm: ruta.distanciaKm };
 }
 

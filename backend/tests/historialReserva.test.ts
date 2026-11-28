@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import { app } from '../src/app';
+import { activarModulosSimulados } from './modulosSimulados';
 import { pool } from '../src/db/pool';
+
+// M2 y M7 simulados por red (ver tests/modulosSimulados.ts).
+activarModulosSimulados();
 
 // RF-9.12: cada cambio de estado deja su fila en historial_reserva, escrita por el backend.
 function datosReserva() {
