@@ -325,7 +325,8 @@ create table public.historial_reserva (
           'M'::bpchar,
           'X'::bpchar,
           'A'::bpchar,
-          'V'::bpchar
+          'V'::bpchar,
+          'R'::bpchar
         ]
       )
     )
