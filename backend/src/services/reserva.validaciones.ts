@@ -2,9 +2,8 @@ import { config } from '../config/env';
 import { AppError, errores } from '../errors/AppError';
 import { CambiosReserva, Direccion, TipoVehiculo } from '../models/reserva';
 import { verificarClienteHabilitado } from '../stubs/m2Clientes.stub';
-import { consultarRuta } from '../stubs/m4Ubicacion.stub';
+import { consultarRuta, obtenerCoordenadas } from '../integraciones/m4Ubicacion';
 import { estimarTarifa } from '../stubs/m7Tarifas.stub';
-import { obtenerCoordenadas } from './geocodificacion.service';
 
 const CAMPOS = ['origen', 'destino', 'tipoVehiculo', 'fechaHora', 'zonaHoraria'];
 
@@ -35,18 +34,13 @@ export function validarVentana(fecha: Date, ahora = new Date()): void {
 }
 
 // Origen y destino aceptan los MISMOS dos formatos en POST y en PATCH:
-//  - texto ("UTN"): se buscan las coordenadas con la geocodificación simulada de M4
+//  - texto ("UTN"): se buscan las coordenadas con la geocodificación de M4
 //  - objeto { direccion, latitud, longitud }: se usan las coordenadas recibidas (ej. desde el mapa)
 export async function resolverUbicacion(valor: unknown): Promise<Direccion> {
   if (typeof valor === 'string') {
     const direccion = valor.trim();
     if (!direccion) throw errores.datosInvalidos(['La dirección no puede estar vacía']);
-    const coordenadas = await obtenerCoordenadas(direccion);
-    if (!coordenadas) {
-      throw new AppError(400, 'COORDENADAS_NO_DISPONIBLES',
-        'No se pudieron obtener las coordenadas del origen o destino', { direccion });
-    }
-    return { direccion, ...coordenadas };
+    return { direccion, ...await obtenerCoordenadas(direccion) };
   }
   return validarDireccion(valor);
 }
@@ -66,12 +60,7 @@ export async function validarRutaYEstimarTarifa(
   destino: Direccion,
   tipoVehiculo: TipoVehiculo,
 ): Promise<{ tarifaEstimada: number; distanciaKm: number }> {
-  const ruta = await consultarRuta(origen, destino);
-  if (!ruta.cubierta) {
-    throw errores.reglaIncumplida('El origen o destino está fuera de la zona de cobertura', {
-      regla: 'FUERA_DE_COBERTURA',
-    });
-  }
+  const ruta = await consultarRuta(origen, destino, tipoVehiculo);
   const tarifaEstimada = await estimarTarifa(tipoVehiculo, ruta.distanciaKm);
   return { tarifaEstimada, distanciaKm: ruta.distanciaKm };
 }

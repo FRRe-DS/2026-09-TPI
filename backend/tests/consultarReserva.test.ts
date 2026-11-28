@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import { app } from '../src/app';
+import './m4Simulado';
 
 describe('GET /reservas/:id', () => {
 

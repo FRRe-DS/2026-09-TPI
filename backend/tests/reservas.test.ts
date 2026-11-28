@@ -11,6 +11,7 @@ vi.mock('../src/repositories/reserva.repository');
 vi.mock('../src/repositories/historial.repository');
 
 import { app } from '../src/app';
+import './m4Simulado';
 import { transaccion } from '../src/db/pool';
 import { actualizarDatosReserva, buscarReservaPorId, cancelarReservaEnBase, confirmarReservaEnBase } from '../src/repositories/reserva.repository';
 import { listarHistorial, registrarHistorial } from '../src/repositories/historial.repository';

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app';
+import './m4Simulado';
 import { randomUUID } from 'crypto';
 
 describe('POST /reservas', () => {
@@ -138,11 +139,7 @@ it('devuelve 422 cuando el origen está fuera de cobertura', async () => {
         .post('/reservas')
         .send({
             clienteId: '25',
-            origen: {
-                direccion: 'Ruta 11 km 1000 FUERA DE ZONA',
-                latitud: -26.18,
-                longitud: -58.17
-            },
+            origen: 'Ruta 11 km 1000 FUERA DE ZONA',
             destino: 'Aeropuerto',
             tipoVehiculo: 'AUTO',
             fechaHora: fechaReserva,

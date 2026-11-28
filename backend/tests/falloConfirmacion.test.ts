@@ -11,6 +11,7 @@ vi.mock('../src/services/confirmarReserva.service', () => ({
 }));
 
 import { app } from '../src/app';
+import './m4Simulado';
 
 describe('Fallo técnico durante la confirmación automática', () => {
 

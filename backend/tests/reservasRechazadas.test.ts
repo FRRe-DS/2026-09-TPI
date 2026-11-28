@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { randomUUID } from 'crypto';
 import { app } from '../src/app';
+import './m4Simulado';
 import { pool } from '../src/db/pool';
 
 describe('Reservas rechazadas', () => {
@@ -46,11 +47,7 @@ describe('Reservas rechazadas', () => {
             .post('/reservas')
             .send({
                 clienteId: '25',
-                origen: {
-                    direccion: 'Ruta 11 km 1000 FUERA DE ZONA',
-                    latitud: -26.18,
-                    longitud: -58.17
-                },
+                origen: 'Ruta 11 km 1000 FUERA DE ZONA',
                 destino: 'Aeropuerto',
                 tipoVehiculo: 'AUTO',
                 fechaHora: new Date(

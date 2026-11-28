@@ -240,6 +240,12 @@ describe('httpCliente.llamarModulo', () => {
   it('el tiempo máximo es para el llamado completo: los reintentos no lo estiran', async () => {
     const original = config.timeoutModulosMs;
     config.timeoutModulosMs = 120;
+    vi.useFakeTimers();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+      const controlador = new AbortController();
+      setTimeout(() => controlador.abort(new DOMException('Tiempo agotado', 'TimeoutError')), ms);
+      return controlador.signal;
+    });
     // Cada intento tarda 50 ms y responde 500: el tercero ya no entra en los 120 ms.
     fetchSimulado.mockImplementation(
       (_url: string, opciones: RequestInit) =>
@@ -253,12 +259,15 @@ describe('httpCliente.llamarModulo', () => {
     );
 
     try {
-      const inicio = Date.now();
-      const error = await capturarError(llamarModulo({ modulo: 'M2', metodo: 'GET', url: URL_M2 }));
+      const resultado = capturarError(llamarModulo({ modulo: 'M2', metodo: 'GET', url: URL_M2 }));
+      await vi.advanceTimersByTimeAsync(120);
+      const error = await resultado;
       expect(error.status).toBe(503);
-      expect(Date.now() - inicio).toBeLessThan(200);
       expect(fetchSimulado).toHaveBeenCalledTimes(3);
+      expect(timeout.mock.calls).toEqual([[120], [70], [20]]);
     } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
       config.timeoutModulosMs = original;
     }
   });
